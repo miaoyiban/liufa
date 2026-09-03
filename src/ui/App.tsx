@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCorpus } from './useCorpus';
 import { AliasIndex } from '../core/alias';
 import { parseQuery } from '../core/parseQuery';
 import { search } from '../core/search';
+import { ResultList, flatResults } from './ResultList';
 import type { Law } from '../core/types';
 import './app.css';
 
@@ -29,12 +30,17 @@ export function App() {
 function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [query, setQuery] = useState('');
   const [reader, setReader] = useState<ReaderTarget>(null);
+  const [selected, setSelected] = useState(0);
 
   const index = useMemo(() => new AliasIndex(corpus.laws), [corpus]);
   const outcome = useMemo(
     () => search(corpus, parseQuery(query, index), { currentPcode: reader?.pcode ?? null }),
     [corpus, query, index, reader?.pcode]
   );
+
+  const flat = useMemo(() => flatResults(outcome.groups), [outcome]);
+
+  useEffect(() => { setSelected(0); }, [query]);
 
   const law: Law | null = reader
     ? corpus.laws.find((l) => l.pcode === reader.pcode) ?? null
@@ -52,8 +58,17 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           aria-label="搜尋法條"
         />
         <div className="result-scroll">
-          {/* Task 12 填入結果清單 */}
-          <div className="status">共 {outcome.totalArticles} 條命中</div>
+          {outcome.totalArticles > 0 && (
+            <div className="summary">
+              共 {outcome.totalArticles} 條命中,分布於 {outcome.totalLaws} 部法規
+            </div>
+          )}
+          {outcome.diagnosis && (
+            <div className="diagnosis">
+              「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
+            </div>
+          )}
+          <ResultList groups={outcome.groups} selected={selected} onSelect={setSelected} />
         </div>
       </div>
       <div className="pane-right">
