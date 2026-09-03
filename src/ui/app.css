@@ -1,0 +1,47 @@
+:root {
+  --bg: #fff;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --line: #e3e3e3;
+  --accent: #0066cc;
+  --sel: #e8f1fb;
+  --mark: #fff1a8;
+  --pane: 340px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 15px/1.75 system-ui, -apple-system, "Noto Sans TC", sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.app { display: grid; grid-template-columns: var(--pane) 1fr; height: 100vh; }
+
+.pane-left {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.pane-right { overflow-y: auto; padding: 2rem 2.5rem 60vh; }
+
+.search-input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font: inherit;
+  font-size: 1.05rem;
+  outline: none;
+}
+
+.result-scroll { flex: 1; overflow-y: auto; }
+
+.status { padding: 2rem; color: var(--muted); }
+.status-error { color: #c00; }
+
+mark { background: var(--mark); color: inherit; }
