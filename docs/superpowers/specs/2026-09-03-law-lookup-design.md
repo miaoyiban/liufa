@@ -270,7 +270,7 @@ IndexedDB(以 `idb` 薄封裝),三個 store,key 一律為 `${pcode}:${no}`:
 |---|---|---|
 | `history` | `{ts, query, pcode, no}` | 保留最近 200 筆,超出自動裁切 |
 | `bookmarks` | `{pcode, no, ts}` | |
-| `notes` | `{pcode, no, body, updatedAt, lawVersionAtWrite}` | |
+| `notes` | `{pcode, no, body, updatedAt, lawVersionAtWrite}` | `body` 為原始 Markdown |
 
 ### 8.1 修法偵測
 
@@ -282,7 +282,11 @@ IndexedDB(以 `idb` 薄封裝),三個 store,key 一律為 `${pcode}:${no}`:
 
 ### 8.2 入口與編輯
 
-搜尋框為空時,左欄顯示「書籤」與「最近查詢」兩區。有筆記的條文在右欄條號旁顯示標記。筆記使用純文字 textarea,500 ms debounce 自動儲存,不支援 Markdown。
+搜尋框為空時,左欄顯示「書籤」與「最近查詢」兩區。有筆記的條文在右欄條號旁顯示標記。筆記支援 **Markdown**,採「編輯 / 預覽」雙態:聚焦時是 textarea 顯示原始碼,失焦後渲染為 HTML,點擊即回到編輯。不做並排即時預覽——課堂筆記是寫完就看,並排會白白吃掉右欄寬度。
+
+儲存 500 ms debounce,`body` 一律存**原始 Markdown 文字**,不存渲染後的 HTML。
+
+渲染以 `marked` 解析,並**必須經 `DOMPurify` sanitize 後才插入 DOM**。雖然筆記出自使用者自己,但 §8.3 的匯入功能會接受外部 JSON 檔,未經 sanitize 的渲染路徑等於給匯入功能開了一個 XSS 缺口。
 
 ### 8.3 備份
 
@@ -314,7 +318,7 @@ law/
     corpus.json
 ```
 
-技術堆疊:React + TypeScript + Vite,`vite-plugin-pwa`,`idb`,Vitest。
+技術堆疊:React + TypeScript + Vite,`vite-plugin-pwa`,`idb`,`marked` + `DOMPurify`(筆記渲染),Vitest。
 
 `src/core/` 不得 import 任何 UI 框架。這是「日後擴充手機版」的具體保證,同時也是最容易測試的邊界。
 
@@ -328,6 +332,7 @@ law/
 | `alias` | `民訴244` 須解析為民事訴訟法(最長匹配);`民184之1`;`民§184-1`;全形數字 |
 | `parseQuery` | §5.1 六種語法形態各一組 |
 | `search` | 精確命中、多 term AND、零命中 term 的定位、分組排序 |
+| `notes` | Markdown 渲染經過 sanitize:含 `<script>` 或 `onerror` 的筆記 body 渲染後不得留下可執行內容 |
 | `build` | **對真實 corpus 斷言**:100 部全在;民法有 1,439 條;民法第 184 條開頭為「因故意或過失」;別名無重複 |
 
 `build` 那組是最重要的。法規改版或來源格式變動是這個專案最可能安靜壞掉的地方,這組測試是唯一的防線。
