@@ -13,8 +13,9 @@ export function extractXml(zip: Uint8Array): string {
   if (!name) {
     throw new Error(`壓縮檔中找不到 .xml,內含:${Object.keys(files).join('、')}`);
   }
-  const text = new TextDecoder('utf-8').decode(files[name]!);
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  // TextDecoder('utf-8') strips a leading UTF-8 BOM by default (ignoreBOM
+  // defaults to false), so no manual strip is needed — the source file has one.
+  return new TextDecoder('utf-8').decode(files[name]!);
 }
 
 export async function downloadSource(cacheDir: string): Promise<string> {
@@ -34,6 +35,6 @@ export async function downloadSource(cacheDir: string): Promise<string> {
   console.log(`  壓縮檔 ${(zip.length / 1048576).toFixed(1)} MB`);
   const xml = extractXml(zip);
   writeFileSync(xmlPath, xml, 'utf8');
-  console.log(`  解壓後 ${(xml.length / 1048576).toFixed(1)} MB → ${xmlPath}`);
+  console.log(`  解壓後 ${(Buffer.byteLength(xml, 'utf8') / 1048576).toFixed(1)} MB → ${xmlPath}`);
   return xmlPath;
 }
