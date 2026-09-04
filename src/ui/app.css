@@ -75,3 +75,24 @@ mark { background: var(--mark); color: inherit; }
 }
 .summary { padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--muted); }
 .diagnosis { padding: 0.75rem 1rem; font-size: 0.85rem; color: #a05a00; background: #fff8e6; }
+
+.reader { max-width: 46rem; }
+.reader-head { margin-bottom: 2rem; }
+.reader-head h1 { margin: 0; font-size: 1.5rem; }
+.reader-meta { color: var(--muted); font-size: 0.85rem; }
+
+/* sticky 章節標題 = 紙本小六法的書眉:往下捲時永遠知道自己在第幾編第幾章 */
+.division {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
+  padding: 0.6rem 0 0.4rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+
+.article { margin: 0 0 1.5rem; scroll-margin-top: 3rem; }
+.article-no { display: block; color: var(--accent); font-size: 0.9rem; }
+.article p { margin: 0.25rem 0; }
+.article-target { background: #fffdf2; }

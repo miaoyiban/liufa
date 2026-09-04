@@ -4,7 +4,9 @@ import { AliasIndex } from '../core/alias';
 import { parseQuery } from '../core/parseQuery';
 import { search } from '../core/search';
 import { ResultList, flatResults } from './ResultList';
+import { ReaderPane } from './ReaderPane';
 import type { Law } from '../core/types';
+import type { Hit } from '../core/search';
 import './app.css';
 
 export type ReaderTarget = { pcode: string; no: string } | null;
@@ -46,6 +48,16 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     ? corpus.laws.find((l) => l.pcode === reader.pcode) ?? null
     : null;
 
+  const hitsByNo = useMemo(() => {
+    const m = new Map<string, Hit[]>();
+    if (!reader) return m;
+    for (const g of outcome.groups) {
+      if (g.pcode !== reader.pcode) continue;
+      for (const r of g.results) m.set(r.article.no, r.hits);
+    }
+    return m;
+  }, [outcome, reader]);
+
   return (
     <div className="app">
       <div className="pane-left">
@@ -72,8 +84,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
         </div>
       </div>
       <div className="pane-right">
-        {/* Task 13 填入閱讀區 */}
-        {law ? <h1>{law.abbr}</h1> : <div className="status">輸入關鍵字或條號開始查詢</div>}
+        <ReaderPane law={law} targetNo={reader?.no ?? null} hitsByNo={hitsByNo} />
       </div>
     </div>
   );
