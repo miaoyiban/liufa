@@ -1,14 +1,32 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, setUpdateAvailable, setUpdateHandler, divisionJumpTargets } from './App';
+import { openLawDb } from '../store/db';
 import type { Corpus } from '../core/types';
 
 beforeAll(() => {
   // jsdom 未實作 scrollIntoView
   Element.prototype.scrollIntoView = vi.fn();
+});
+
+// 測試隔離:useLawDb.ts 呼叫 openLawDb() 不帶名稱,固定開在預設的 'law-lookup',
+// 本檔每個測試渲染的 App 因此共用同一份 fake-IndexedDB。不隔離的話,前一個測試
+// 留下的書籤/筆記會外洩到後面的測試(Task A 期間就咬過一次:把「加入」翻轉成
+// 「移除」),而且是靠檔內順序才看得出來的隱性耦合。
+//
+// 做法是每個測試換一個全新的 IDBFactory,而不是在測試結束時
+// deleteDatabase('law-lookup'):useLawDb 不會在卸載時關閉連線(那是它的正常
+// 行為,不是要在這裡修的 production 問題),而 deleteDatabase 只要還有連線沒關
+// 就會卡在 'blocked' 永不完成;先關連線再刪又會跟「上一個測試尚未結束的非同步
+// openLawDb」相撞,反而讓整套測試變得不穩定。換掉整個 factory 沒有這些問題:
+// 新的 factory 一定是空的,上一個測試殘留的非同步操作留在舊 factory 上,自行
+// 隨著垃圾回收消失,不影響任何人。
+beforeEach(() => {
+  vi.stubGlobal('indexedDB', new IDBFactory());
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,7 +49,20 @@ const corpus: Corpus = {
 async function renderReady(c: Corpus = corpus) {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => c })));
   render(<App />);
-  return screen.findByLabelText('搜尋法條');
+  const input = await screen.findByLabelText('搜尋法條');
+  // 等本機資料庫真的開好再把控制權交還給測試。useLawDb 的 openLawDb() 是非同步
+  // 的,在它完成之前 db 還是 null,Cmd+D 與「寫入最近查詢」都會靜默地不做事——
+  // 過去這件事沒有咬到人,只是因為所有測試共用同一份資料庫,第一個測試就把
+  // schema 建好了,後面的測試開的都是「已存在的資料庫」而快得看不出來。隔離成
+  // 每個測試一份全新的 factory 之後,這個競態就浮出來了,必須明確地等。
+  //
+  // 等法:IndexedDB 依送出順序處理請求。Workspace 掛載時 useLawDb 已經送出
+  // open,所以這裡自己再 open 一次並等它完成,就保證 App 的那一個也完成了。
+  // 資料庫本來就開不起來的測試(私密瀏覽情境)由 catch 直接放行。
+  await act(async () => {
+    await openLawDb().then((d) => d.close()).catch(() => {});
+  });
+  return input;
 }
 
 function targetArticleId(): string | undefined {
@@ -263,13 +294,6 @@ describe('候選不只一部、尚未按方向鍵時的 Enter / Cmd+D(fix round 
     await waitFor(() =>
       expect(document.querySelector('#article-184 [aria-label="已加入書籤"]')).not.toBeNull()
     );
-
-    // 復原:openLawDb() 用固定的預設資料庫名稱,同一個檔案內的所有測試共用
-    // 同一份 IndexedDB('law-lookup'),不會在測試之間重置。下面「Cmd+D 書籤」
-    // 描述區塊裡的既有測試用的也是「民法 184」這把鍵,這裡加了書籤不清掉,
-    // 會讓那個測試的第一次按 Cmd+D 變成「移除」而不是「加入」。
-    fireEvent.keyDown(window, { key: 'd', metaKey: true });
-    await screen.findByText('已移除書籤:民法 184');
   });
 });
 
