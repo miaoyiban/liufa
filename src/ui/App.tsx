@@ -16,6 +16,20 @@ import './app.css';
 
 export type ReaderTarget = { pcode: string; no: string } | null;
 
+/**
+ * `[`/`]` 只跳編、章(level ≤ 1),不跳節、款、目——這些層級太密集(民法
+ * 1,578 個 block 裡 139 個 division,節/款密集處相鄰 division 常只隔一兩條,
+ * 按起來就像逐條跳,不是逐章節跳)。輸入每個 `.division` 節點的 level,回傳
+ * 應該納入跳轉目標的索引。
+ */
+export function divisionJumpTargets(levels: number[]): number[] {
+  const targets: number[] = [];
+  levels.forEach((level, i) => {
+    if (level <= 1) targets.push(i);
+  });
+  return targets;
+}
+
 // Service Worker 偵測到新版時透過此訂閱點通知目前掛載的 Workspace。
 // 不自動靜默更新:只標記狀態,重新載入與否由使用者在 UpdateBanner 決定。
 let notifyUpdate: ((v: boolean) => void) | null = null;
@@ -88,29 +102,54 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
 
   useEffect(() => { setSelected(0); }, [query]);
 
-  const law: Law | null = reader
-    ? corpus.laws.find((l) => l.pcode === reader.pcode) ?? null
+  // C1:候選不只一部法規時,絕不能把搜尋結果的第一筆自動寫進 reader——那正是
+  // 「系統替使用者猜法規」,猜錯時使用者看到條號正確但法規錯誤的條文,課堂上
+  // 難以察覺(同一原則見 src/core/search.ts)。只有候選收斂到唯一一部法規時
+  // 才沒有猜的問題,可以放心確認為 reader、成為下一次查詢的脈絡(§5.5 情境一)。
+  // 依賴只放 outcome:使用者移動選取(見下方 selectAndFollow)不會讓 outcome
+  // 重新計算,不會誤觸這裡——兩種寫入 reader 的路徑因此不會互相干擾。
+  useEffect(() => {
+    if (outcome.totalLaws === 1) {
+      const r = outcome.groups[0]?.results[0];
+      if (r) setReader({ pcode: r.pcode, no: r.article.no });
+    }
+  }, [outcome]);
+
+  // 候選不只一部法規時,右欄仍要「預覽」目前選取的候選(對應左欄預設反白的
+  // 第一筆),但這個預覽只用來顯示,不寫回 reader、不會成為下一次查詢的
+  // 脈絡——這正是不讓右欄預覽污染 ctxPcode 的關鍵。已經有 reader(不論是唯一
+  // 候選自動確認、條號/法規查詢的明確跳轉,還是使用者主動選取的結果)時,
+  // 顯示 reader 本身,不被這裡的預覽蓋過。
+  const previewTarget = flat[selected];
+  const displayTarget: ReaderTarget = reader
+    ?? (previewTarget ? { pcode: previewTarget.pcode, no: previewTarget.article.no } : null);
+
+  const law: Law | null = displayTarget
+    ? corpus.laws.find((l) => l.pcode === displayTarget.pcode) ?? null
     : null;
 
   const hitsByNo = useMemo(() => {
     const m = new Map<string, Hit[]>();
-    if (!reader) return m;
+    if (!displayTarget) return m;
     for (const g of outcome.groups) {
-      if (g.pcode !== reader.pcode) continue;
+      if (g.pcode !== displayTarget.pcode) continue;
       for (const r of g.results) m.set(r.article.no, r.hits);
     }
     return m;
-  }, [outcome, reader]);
+  }, [outcome, displayTarget]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
 
-  // 單向同步:選取變動 → 右欄跟隨。右欄自行捲動時「不」回頭改變選取,
-  // 否則往下讀兩頁鄰近條文,左欄選取會一路跳動。
-  useEffect(() => {
-    const r = flat[selected];
+  // 使用者主動選取(方向鍵移動或點擊清單項目)才讓右欄跟隨並成為之後查詢的
+  // 脈絡——即使候選不只一部,這是使用者自己選的,不是系統拿第一筆亂猜。
+  // 右欄自行捲動時「不」回頭改變選取,否則往下讀兩頁鄰近條文,左欄選取會
+  // 一路跳動。
+  const selectAndFollow = (i: number) => {
+    setSelected(i);
+    const r = flat[i];
     if (r) setReader({ pcode: r.pcode, no: r.article.no });
-  }, [flat, selected]);
+  };
 
   // 條號查詢的直接跳轉
   useEffect(() => {
@@ -122,16 +161,21 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     if (!divisions?.length) return;
     const top = readerRef.current!.scrollTop;
     const list = [...divisions] as HTMLElement[];
+    const levels = list.map((d) => Number(d.dataset.level ?? '0'));
+    const targets = divisionJumpTargets(levels)
+      .map((i) => list[i])
+      .filter((d): d is HTMLElement => d !== undefined);
+    if (!targets.length) return;
     const next = dir === 1
-      ? list.find((d) => d.offsetTop > top + 4)
-      : [...list].reverse().find((d) => d.offsetTop < top - 4);
+      ? targets.find((d) => d.offsetTop > top + 4)
+      : [...targets].reverse().find((d) => d.offsetTop < top - 4);
     next?.scrollIntoView({ block: 'start' });
   };
 
   useKeyboard({
     count: flat.length,
     selected,
-    onMove: setSelected,
+    onMove: selectAndFollow,
     onEnter: () => {
       readerRef.current?.focus();
       // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
@@ -199,7 +243,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
                   「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
                 </div>
               )}
-              <ResultList groups={outcome.groups} selected={selected} onSelect={setSelected} />
+              <ResultList groups={outcome.groups} selected={selected} onSelect={selectAndFollow} />
             </>
           )}
         </div>
@@ -208,7 +252,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
       <div className="pane-right" ref={readerRef} tabIndex={-1}>
         <ReaderPane
           law={law}
-          targetNo={reader?.no ?? null}
+          targetNo={displayTarget?.no ?? null}
           hitsByNo={hitsByNo}
           notes={notes}
           bookmarks={bookmarks}

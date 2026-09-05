@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { App, setUpdateAvailable, setUpdateHandler } from './App';
+import { App, setUpdateAvailable, setUpdateHandler, divisionJumpTargets } from './App';
 import type { Corpus } from '../core/types';
 
 beforeAll(() => {
@@ -101,11 +101,40 @@ function coreLaw(pcode: string, abbr: string, group: string): Corpus['laws'][num
   };
 }
 
+// C1 重現用:每部核心法規都同時有第 1、18、184 條(真實語料中幾乎每部法規
+// 都有這三條)。上面的 coreLaw/coreCorpus 只定義了 184、185——逐字輸入
+// "1"→"18" 時中間按鍵永遠零命中,flat 保持空,auto-follow effect 從未觸發,
+// 完全踩不到 C1 的競態(假綠燈)。這裡讓每一步都是非空、可能有多筆候選的
+// 中間狀態,才會真正踩到「上一個按鍵的第一筆猜測污染下一個按鍵的搜尋脈絡」。
+function coreLawWithShortArticles(pcode: string, abbr: string, group: string): Corpus['laws'][number] {
+  return {
+    pcode, name: abbr, abbr, aliases: [], group,
+    updated: '20260817', history: '1.制定',
+    blocks: ['1', '18', '184', '185'].map((no) => ({
+      t: 'a' as const, no, main: Number(no), sub: 0,
+      label: `第 ${no} 條`, text: `${abbr}第${no}條內容。`,
+    })),
+  };
+}
+
+const coreCorpusShortArticles: Corpus = {
+  sourceUpdatedAt: '2026/8/21',
+  builtAt: '2026-09-03T00:00:00.000Z',
+  laws: [
+    coreLawWithShortArticles('B0000001', '民法', '民法及關係法規'),
+    coreLawWithShortArticles('B0010001', '民事訴訟法', '民事訴訟法及關係法規'),
+    coreLawWithShortArticles('C0000001', '刑法', '刑法及關係法規'),
+    coreLawWithShortArticles('C0010001', '刑事訴訟法', '刑事訴訟法及關係法規'),
+  ],
+};
+
 describe('§5.5 情境二:冷啟動輸入純數字條號', () => {
   it('候選清單完整呈現,且方向鍵能走完全部候選', async () => {
     const user = userEvent.setup();
-    const input = await renderReady(coreCorpus);
+    const input = await renderReady(coreCorpusShortArticles);
 
+    // 逐字輸入(userEvent.type 預設一次一個字元):'1' → '18' → '184'。
+    // 三步都在四部核心法規裡有命中,才會真的踩到 C1 的競態。
     await user.type(input, '184');
 
     // 四部核心法規都有第 184 條,四個都必須留在清單上
@@ -281,5 +310,20 @@ describe('離線更新橫幅的重新載入接線', () => {
     // skip-waiting 訊息、啟用新 Service Worker 的邏輯屬於 main.tsx,
     // 不在單元測試環境(jsdom 沒有 Service Worker)可驗證的範圍內。
     expect(updateSW).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('divisionJumpTargets(A-2:`[`/`]` 只跳編章,不跳節款目)', () => {
+  it('只保留 level 0、1(編、章),節/款/目被濾掉', () => {
+    // 編(0) 章(1) 節(2) 款(3) 章(1) 目(4)
+    expect(divisionJumpTargets([0, 1, 2, 3, 1, 4])).toEqual([0, 1, 4]);
+  });
+
+  it('沒有任何 division 時回傳空陣列', () => {
+    expect(divisionJumpTargets([])).toEqual([]);
+  });
+
+  it('全部都是節、款、目時回傳空陣列(該法規沒有可跳的編章)', () => {
+    expect(divisionJumpTargets([2, 3, 4])).toEqual([]);
   });
 });
