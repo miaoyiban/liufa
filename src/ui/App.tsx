@@ -188,18 +188,24 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     onMove: selectAndFollow,
     onEnter: () => {
       readerRef.current?.focus();
-      // Enter 只在「已無可猜之處」時把顯示中的條文確認為脈絡:候選已收斂到
-      // 唯一一部(§5.5 情境一),或使用者已經自己選過(reader 非 null)。
+      // 這裡**刻意沒有** setReader。Enter 的定義只有一件事:焦點移至右欄,
+      // 進入閱讀(§7.2)。它不決定脈絡法規,一次也不。
       //
-      // 候選不只一部而使用者尚未選取時,Enter 只是「進入閱讀」(§7.2),不替他
-      // 決定脈絡法規——Enter 這個按鍵不帶任何「使用者指的是四部裡的哪一部」的
-      // 資訊,民法排第一只是因為 search.ts 依分類順序回傳。若在這裡確認,它會
-      // 經由 ctxPcode 靜默收窄之後的每一個查詢(且 Escape 清不掉),下一個
-      // 純數字查詢就會少報候選——那正是 C1 的病灶,只是拿按鍵當掩護。
+      // 理由:Enter 不帶任何「使用者指的是四部候選裡的哪一部」的資訊。民法
+      // 排第一只是因為 search.ts 依分類順序回傳。在這裡寫 reader,等於讓系統
+      // 拿按鍵當掩護替使用者猜法規;猜完會經由 ctxPcode 靜默收窄之後的每一個
+      // 查詢(且 Escape 清不掉 reader),下一個純數字查詢就少報候選,摘要卻
+      // 照樣理直氣壯——那正是 C1 的病灶。這條路曾經被加回來過一次,別再加。
       //
-      // addHistory 與 onBookmark 仍讀 displayTarget:它們是對「畫面上顯示的
-      // 這一條」動作,不涉及脈絡,不受這個守衛影響。
-      if (displayTarget && (reader || outcome.totalLaws <= 1)) setReader(displayTarget);
+      // reader 的合法來源只有兩類,都不在這個 handler 裡(§5.5.1):
+      //   - 唯一候選自動確認:上方 totalLaws === 1 的 effect,以及條號/法規
+      //     查詢的 jumpTo——此時沒有可猜之處
+      //   - 使用者主動選取:方向鍵/點擊清單(selectAndFollow)、目錄分頁點條文、
+      //     側欄點書籤或最近查詢
+      //
+      // 下面的 addHistory 與 onBookmark 仍讀 displayTarget(可能是預覽):它們
+      // 是對「畫面上顯示的這一條」動作,不涉及脈絡,不受上述限制。
+      //
       // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
       // 尚未跳轉時寫入沒有意義的紀錄。在目錄分頁按 Enter 也不寫:使用者是在
       // 逐層點目錄,不是在查詢,把左欄殘留的查詢字串記成「最近查詢」是謊報。
