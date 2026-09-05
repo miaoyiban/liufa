@@ -37,8 +37,12 @@ npm test
 ## 部署
 
 `.github/workflows/deploy.yml` 會在推送到 `main`、手動觸發,或每月 1 日(對應資料來源的月更頻率)
-自動重建並部署到 GitHub Pages:安裝依賴、跑測試、執行 `npm run data` 產生 `public/corpus.json`
-(此檔不進版控),再 `npm run build`,最後把 `dist/` 發布到 Pages。
+自動重建並部署到 GitHub Pages:安裝依賴、執行 `npm run data` 產生 `public/corpus.json`
+(此檔不進版控,必須在跑測試與 build 之前先產生,否則 `corpus.test.ts`
+的守門測試會直接失敗),再跑測試、`npm run build`,最後把 `dist/` 發布到 Pages。
 
 `vite.config.ts` 的 `base` 在 CI(`GITHUB_ACTIONS` 環境變數存在時)設為 `/law/`,
-本機開發則維持 `/`;若 repository 改名,需同步修改這裡的路徑。
+本機開發則維持 `/`。**部署前務必確認**:若這個 repository 在 GitHub 上的實際名稱
+不是 `law`(例如 fork 後改了名字),要先把這裡的 `base` 改成對應的
+`/<repo>/`,否則所有資產、manifest 與 Service Worker 的路徑都會指到錯誤的
+前綴,production 站台會整頁空白。
