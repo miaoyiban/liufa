@@ -105,6 +105,8 @@ mark { background: var(--mark); color: inherit; }
   border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem; resize: vertical;
 }
 .note-warning { font-size: 0.8rem; color: #a05a00; margin-bottom: 0.35rem; }
+.note-error { font-size: 0.8rem; color: #c00; margin-top: 0.35rem; }
+.note-unavailable { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--muted); }
 .note-add {
   border: 0; background: none; color: var(--muted); font: inherit;
   font-size: 0.85rem; cursor: pointer; padding: 0.2rem 0; opacity: 0;

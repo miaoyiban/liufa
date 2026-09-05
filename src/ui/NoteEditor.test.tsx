@@ -59,4 +59,43 @@ describe('NoteEditor', () => {
     render(<NoteEditor {...base} note={note('內容')} db={db} />);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it('編輯中收到自己存檔觸發的 note prop 更新,不會被踢出編輯狀態(review round 1 #1)', async () => {
+    const { rerender } = render(<NoteEditor {...base} note={undefined} db={db} />);
+    await userEvent.click(screen.getByRole('button', { name: /新增筆記/ }));
+    const ta = (await screen.findByRole('textbox')) as HTMLTextAreaElement;
+    await userEvent.type(ta, 'AB');
+
+    // 模擬 App 端 onSaved → reloadNotes 帶回的新 note prop(內容與目前草稿相同,
+    // 但是全新的物件參照——這正是原本觸發重置 effect 的條件)。
+    rerender(<NoteEditor {...base} note={note('AB')} db={db} />);
+
+    const stillEditing = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(stillEditing).toBe(ta);
+    expect(stillEditing.value).toBe('AB');
+
+    // 繼續輸入不會被剛才的 rerender 蓋掉。
+    await userEvent.type(stillEditing, 'C');
+    expect(stillEditing.value).toBe('ABC');
+  });
+
+  it('卸載時補存尚未觸發 debounce 的內容(review round 1 #2)', async () => {
+    const { unmount } = render(<NoteEditor {...base} note={undefined} db={db} />);
+    await userEvent.click(screen.getByRole('button', { name: /新增筆記/ }));
+    await userEvent.type(await screen.findByRole('textbox'), '尚未存檔');
+
+    unmount(); // 遠早於 500ms debounce,原本的 clearTimeout 會直接丟掉這段內容
+
+    await waitFor(
+      async () => expect((await getNote(db, 'B0000001', '184'))?.body).toBe('尚未存檔'),
+      { timeout: 3000 }
+    );
+  });
+
+  it('資料庫無法使用時顯示原因,且不讓使用者誤以為打字會存到(review round 1 #3)', () => {
+    render(<NoteEditor {...base} note={undefined} db={null} />);
+    expect(screen.getByText(/筆記功能暫時無法使用/)).toBeDefined();
+    expect(screen.queryByRole('button', { name: /新增筆記/ })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
 });

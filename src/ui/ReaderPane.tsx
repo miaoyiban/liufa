@@ -1,17 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { Article, Law } from '../core/types';
 import type { Hit } from '../core/search';
+import { formatLawDate } from '../core/date';
 import { Highlight } from './Highlight';
 import { NoteEditor } from './NoteEditor';
 import { articleKey, type LawDb, type Note } from '../store/db';
 
 export function articleDomId(no: string): string {
   return `article-${no}`;
-}
-
-function formatUpdated(yyyymmdd: string): string {
-  if (!/^\d{8}$/.test(yyyymmdd)) return yyyymmdd;
-  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 }
 
 type Props = {
@@ -41,7 +37,7 @@ export function ReaderPane({ law, targetNo, hitsByNo, notes, db, onNoteSaved }: 
     <div ref={rootRef} className="reader">
       <header className="reader-head">
         <h1>{law.abbr}</h1>
-        <div className="reader-meta">最後修正 {formatUpdated(law.updated)}</div>
+        <div className="reader-meta">最後修正 {formatLawDate(law.updated)}</div>
       </header>
       {law.blocks.map((b, i) =>
         b.t === 'd' ? (

@@ -34,6 +34,32 @@ describe('renderMarkdown', () => {
     const html = renderMarkdown('[點我](javascript:alert(1))');
     expect(html).not.toContain('javascript:');
   });
+
+  it('移除帶前導空白的 javascript: 連結', () => {
+    const html = renderMarkdown('<a href=" javascript:alert(1)">點我</a>');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('移除 iframe', () => {
+    const html = renderMarkdown('<iframe src="https://evil.example"></iframe>');
+    expect(html).not.toContain('<iframe');
+  });
+
+  it('移除 svg 內的 animate onbegin', () => {
+    const html = renderMarkdown('<svg><animate onbegin="alert(1)" /></svg>');
+    expect(html).not.toContain('onbegin');
+  });
+
+  it('移除 onload 屬性', () => {
+    const html = renderMarkdown('<img src=x onload="alert(1)">');
+    expect(html).not.toContain('onload');
+  });
+
+  it('移除 style 標籤與屬性(避免藏起修法警示)', () => {
+    const html = renderMarkdown('<style>.note-warning{display:none}</style><p style="color:red">內容</p>');
+    expect(html).not.toContain('<style');
+    expect(html).not.toContain('style=');
+  });
 });
 
 describe('staleNoteWarning', () => {
@@ -53,5 +79,9 @@ describe('staleNoteWarning', () => {
 
   it('舊備份沒有版本資訊時不警示(無從判斷)', () => {
     expect(staleNoteWarning(note({ lawVersionAtWrite: '' }), '20260817')).toBeNull();
+  });
+
+  it('法規本身沒有異動日期時不警示(無從判斷,不顯示空白日期)', () => {
+    expect(staleNoteWarning(note(), '')).toBeNull();
   });
 });
