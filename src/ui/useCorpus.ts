@@ -6,7 +6,7 @@ export type CorpusStatus =
   | { state: 'ready'; corpus: Corpus }
   | { state: 'error'; message: string };
 
-export function useCorpus(url = '/corpus.json'): CorpusStatus {
+export function useCorpus(url = `${import.meta.env.BASE_URL}corpus.json`): CorpusStatus {
   const [status, setStatus] = useState<CorpusStatus>({ state: 'loading' });
 
   useEffect(() => {
