@@ -82,4 +82,43 @@ describe('useKeyboard', () => {
     expect(o.onMove).not.toHaveBeenCalled();
     ta.remove();
   });
+
+  it('輸入法組字中不攔截任何鍵(isComposing)', () => {
+    const o = setup();
+    press('ArrowDown', { isComposing: true });
+    press('Enter', { isComposing: true });
+    press('Escape', { isComposing: true });
+    expect(o.onMove).not.toHaveBeenCalled();
+    expect(o.onEnter).not.toHaveBeenCalled();
+    expect(o.onEscape).not.toHaveBeenCalled();
+  });
+
+  it('搜尋框(input)聚焦時方向鍵仍可運作', () => {
+    const o = setup();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(o.onMove).toHaveBeenCalledWith(2);
+    input.remove();
+  });
+
+  it('搜尋框(input)中打中括號字元不觸發跳章節', () => {
+    const o = setup();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true }));
+    expect(o.onDivision).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('連續按兩次 ↓ 而中間沒有重新 render,兩次都以目前的 selected 計算', () => {
+    // 這是防呆測試:確保「只訂閱一次」的最佳化不是靠內部自行遞增一個
+    // 计数器來取代 selected prop——若真的那樣做,第二次按下會算出 3
+    // 而非正確的 2(因為 mock 的 onMove 不會真的回頭更新 selected)。
+    const o = setup();
+    press('ArrowDown');
+    press('ArrowDown');
+    expect(o.onMove).toHaveBeenNthCalledWith(1, 2);
+    expect(o.onMove).toHaveBeenNthCalledWith(2, 2);
+  });
 });
