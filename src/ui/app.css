@@ -18,13 +18,14 @@ body {
   background: var(--bg);
 }
 
-.app { display: grid; grid-template-columns: var(--pane) 1fr; height: 100vh; }
+.app { display: grid; grid-template-columns: var(--pane) 1fr; height: 100dvh; }
 
 .pane-left {
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--line);
   min-width: 0;
+  min-height: 0;
 }
 
 .pane-right { overflow-y: auto; padding: 2rem 2.5rem 60vh; }
@@ -39,7 +40,7 @@ body {
   outline: none;
 }
 
-.result-scroll { flex: 1; overflow-y: auto; }
+.result-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* 左欄分頁:搜尋 / 目錄 */
 .tabs { display: flex; border-bottom: 1px solid var(--line); }
