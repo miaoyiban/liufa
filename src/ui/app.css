@@ -113,3 +113,12 @@ mark { background: var(--mark); color: inherit; }
 }
 .article:hover .note-add, .article-target .note-add,
 .article:hover .note-unavailable, .article-target .note-unavailable { opacity: 1; }
+
+.side { padding-bottom: 1rem; }
+.transfer { padding: 1rem; border-top: 1px solid var(--line); display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.transfer button, .transfer-import {
+  font: inherit; font-size: 0.85rem; padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer;
+}
+.transfer-import input { display: none; }
+.transfer-msg { flex-basis: 100%; font-size: 0.8rem; color: var(--muted); }

@@ -5,8 +5,10 @@ import { parseQuery } from '../core/parseQuery';
 import { search } from '../core/search';
 import { ResultList, flatResults } from './ResultList';
 import { ReaderPane } from './ReaderPane';
+import { SidePanel } from './SidePanel';
 import { useKeyboard } from './useKeyboard';
 import { useLawDb, useNotes } from './useLawDb';
+import { addHistory, toggleBookmark } from '../store/db';
 import type { Law } from '../core/types';
 import type { Hit } from '../core/search';
 import './app.css';
@@ -35,6 +37,8 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [query, setQuery] = useState('');
   const [reader, setReader] = useState<ReaderTarget>(null);
   const [selected, setSelected] = useState(0);
+  // 書籤變動後用來強制 SidePanel 重新掛載、重新讀取清單(見下方 onBookmark)。
+  const [dbVersion, setDbVersion] = useState(0);
   const db = useLawDb();
   const { notes, reload: reloadNotes } = useNotes(db);
 
@@ -92,13 +96,26 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     count: flat.length,
     selected,
     onMove: setSelected,
-    onEnter: () => readerRef.current?.focus(),
+    onEnter: () => {
+      readerRef.current?.focus();
+      // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
+      // 尚未跳轉時寫入沒有意義的紀錄。
+      if (db && reader && query) {
+        addHistory(db, { ts: Date.now(), query, pcode: reader.pcode, no: reader.no })
+          .catch((err) => console.error('寫入最近查詢失敗', err));
+      }
+    },
     onEscape: () => {
       if (query) setQuery('');
       inputRef.current?.focus();
     },
     onDivision: jumpDivision,
-    onBookmark: () => { /* Task 16 接上書籤 */ },
+    onBookmark: () => {
+      if (!db || !reader) return;
+      toggleBookmark(db, reader.pcode, reader.no)
+        .then(() => setDbVersion((v) => v + 1))
+        .catch((err) => console.error('切換書籤失敗', err));
+    },
   });
 
   return (
@@ -114,17 +131,23 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           aria-label="搜尋法條"
         />
         <div className="result-scroll">
-          {outcome.totalArticles > 0 && (
-            <div className="summary">
-              共 {outcome.totalArticles} 條命中,分布於 {outcome.totalLaws} 部法規
-            </div>
+          {query === '' ? (
+            <SidePanel key={dbVersion} db={db} corpus={corpus} onOpen={setReader} />
+          ) : (
+            <>
+              {outcome.totalArticles > 0 && (
+                <div className="summary">
+                  共 {outcome.totalArticles} 條命中,分布於 {outcome.totalLaws} 部法規
+                </div>
+              )}
+              {outcome.diagnosis && (
+                <div className="diagnosis">
+                  「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
+                </div>
+              )}
+              <ResultList groups={outcome.groups} selected={selected} onSelect={setSelected} />
+            </>
           )}
-          {outcome.diagnosis && (
-            <div className="diagnosis">
-              「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
-            </div>
-          )}
-          <ResultList groups={outcome.groups} selected={selected} onSelect={setSelected} />
         </div>
       </div>
       <div className="pane-right" ref={readerRef} tabIndex={-1}>
