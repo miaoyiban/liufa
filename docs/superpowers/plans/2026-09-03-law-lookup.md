@@ -808,7 +808,7 @@ export function parseQuery(raw: string, index: AliasIndex): Query {
 - [ ] **Step 4: 執行測試,確認通過**
 
 Run: `npx vitest run src/core/parseQuery.test.ts`
-Expected: PASS(18 個測試)
+Expected: PASS(16 個測試)
 
 - [ ] **Step 5: Commit**
 
@@ -1621,7 +1621,7 @@ describe('matchArticle', () => {
 
   it('命中位置依 start 由小到大排序', () => {
     const hits = matchArticle(text, ['賠償', '故意'])!;
-    expect(hits.map((h) => h.start)).toEqual([1, 19]);
+    expect(hits.map((h) => h.start)).toEqual([1, 21]);
   });
 
   it('空 term 陣列回傳 null', () => {
@@ -2528,7 +2528,7 @@ export async function importAll(
 - [ ] **Step 4: 執行測試,確認通過**
 
 Run: `npx vitest run src/store/transfer.test.ts`
-Expected: PASS(7 個測試)
+Expected: PASS(6 個測試)
 
 - [ ] **Step 5: Commit**
 
