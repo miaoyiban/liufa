@@ -65,7 +65,11 @@ export const CORE_LAW_PCODES = [
   'A0030055', // 行政程序法
 ];
 
-const EMPTY: SearchOutcome = { groups: [], totalArticles: 0, totalLaws: 0 };
+// 模組級單例:所有空結果共用同一個物件,連 `{ ...EMPTY, jumpTo }` 的淺拷貝
+// 也共用同一個 groups 陣列。凍結起來,日後有人就地 push 會當場拋錯,而不是
+// 靜默地把一筆結果滲進其他每一個空查詢。
+const EMPTY: SearchOutcome = Object.freeze({ groups: [], totalArticles: 0, totalLaws: 0 });
+Object.freeze(EMPTY.groups);
 
 function articlesOf(law: Law): Article[] {
   return law.blocks.filter((b): b is Article => b.t === 'a');
@@ -132,10 +136,13 @@ function countMatches(laws: Law[], terms: string[]): number {
 
 function diagnose(laws: Law[], terms: string[]): Diagnosis | undefined {
   if (terms.length < 2) return undefined;
-  for (const term of terms) {
-    const rest = terms.filter((t) => t !== term);
+  // 依「索引」排除,不依「值」。查詢裡出現重複詞時,依值排除會一次拿掉全部
+  // 同名的 term,於是回報的 remaining 是「移除兩個之後」的數字,使用者照著
+  // 刪掉一個卻拿不到那些結果。§6.3:印出錯誤的數字比不印更危險。
+  for (let i = 0; i < terms.length; i++) {
+    const rest = terms.filter((_, j) => j !== i);
     const remaining = countMatches(laws, rest);
-    if (remaining > 0) return { term, remaining };
+    if (remaining > 0) return { term: terms[i]!, remaining };
   }
   return undefined;
 }

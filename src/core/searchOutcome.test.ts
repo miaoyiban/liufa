@@ -160,6 +160,34 @@ describe('search — 零結果診斷', () => {
     const q: Query = { kind: 'keyword', pcode: null, terms: ['甲甲甲', '乙乙乙'] };
     expect(search(corpus, q, noCtx).diagnosis).toBeUndefined();
   });
+
+  it('重複的 term 依索引排除,不會報出「移除一個就有 N 條」這種做不到的數字', () => {
+    // 「甲甲甲」零命中。移除其中一個之後另一個還在,命中數仍是 0,所以沒有
+    // 任何單一 term 值得回報。依「值」排除會一次拿掉兩個,於是宣告
+    // 「『甲甲甲』無命中,移除後有 4 條」——那 4 條是使用者照做也拿不到的。
+    // §6.3:印出錯誤的數字比不印更危險。
+    const q: Query = { kind: 'keyword', pcode: null, terms: ['甲甲甲', '甲甲甲', '過失'] };
+    expect(search(corpus, q, noCtx).diagnosis).toBeUndefined();
+  });
+});
+
+describe('search — 空結果單例不可變', () => {
+  // 空結果由模組級單例提供,連 `{ ...EMPTY, jumpTo }` 的淺拷貝也共用同一個
+  // groups 陣列。目前沒有人就地變動它,但真的有人 push 進去,污染會擴散到
+  // 其他每一個空結果,而且完全不出聲。凍結起來讓這件事永遠不可能發生。
+  it('空查詢、查無條號、法規跳轉三者共用同一個已凍結的 groups', () => {
+    const empty = search(corpus, { kind: 'empty' }, noCtx);
+    const missing = search(
+      corpus, { kind: 'article', pcode: 'B0000001', no: { main: 9999, sub: 0 } }, noCtx
+    );
+    const jump = search(corpus, { kind: 'law', pcode: 'B0000001' }, noCtx);
+
+    expect(missing.groups).toBe(empty.groups);
+    expect(jump.groups).toBe(empty.groups);
+    expect(Object.isFrozen(empty.groups)).toBe(true);
+    expect(() => empty.groups.push({ pcode: 'X', abbr: 'X', results: [] })).toThrow();
+    expect(empty.groups).toHaveLength(0);
+  });
 });
 
 describe('search — 真實語料', () => {

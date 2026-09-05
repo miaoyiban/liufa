@@ -262,7 +262,11 @@ describe('唯一候選自動確認(totalLaws === 1 時的 reader 自動確認)',
 });
 
 describe('候選不只一部、尚未按方向鍵時的 Enter / Cmd+D(fix round 2)', () => {
-  it('Enter 把目前顯示(預覽)的候選提升為 reader,並寫入最近查詢', async () => {
+  // 舊標題寫的是「把預覽提升為 reader」,但本體從頭到尾沒有觀察 reader:
+  // 歷史紀錄是從 displayTarget 產生的,不論 reader 有沒有被寫入都會出現。
+  // 標題改成本體真正涵蓋的兩件事;「Enter 與脈絡法規的關係」由下面 C-A 那一組
+  // 測試負責,那才有觀察得到的量(ctxPcode)。
+  it('Enter 對顯示中的預覽候選寫入最近查詢,並把焦點移到右欄(§7.2)', async () => {
     const user = userEvent.setup();
     const input = await renderReady(coreCorpus);
     fireEvent.change(input, { target: { value: '184' } });
@@ -272,6 +276,9 @@ describe('候選不只一部、尚未按方向鍵時的 Enter / Cmd+D(fix round 
     await waitFor(() => expect(readerLaw()).toBe('民法'));
 
     fireEvent.keyDown(window, { key: 'Enter' });
+
+    // §7.2 對 Enter 的定義:焦點移至右欄,進入閱讀
+    expect(document.activeElement).toBe(document.querySelector('.pane-right'));
 
     // 清空查詢换回側欄,檢查「最近查詢」是否真的多了這一筆(對應顯示中的
     // 民法,而不是靜默 no-op)
@@ -294,6 +301,59 @@ describe('候選不只一部、尚未按方向鍵時的 Enter / Cmd+D(fix round 
     await waitFor(() =>
       expect(document.querySelector('#article-184 [aria-label="已加入書籤"]')).not.toBeNull()
     );
+  });
+});
+
+describe('C-A:Enter 不替使用者決定脈絡法規', () => {
+  // C1 的形狀,中間插了一個按鍵。Enter 本身不帶任何「使用者指的是四部裡的
+  // 哪一部」的資訊——民法排第一只是因為 search.ts 依分類順序回傳。把它確認成
+  // reader,就會經由 ctxPcode 靜默收窄之後的每一個查詢,並印出不實的涵蓋宣告。
+  //
+  // 唯一觀察得到的量是 ctxPcode 對下一個查詢的效果,所以這裡刻意做完整的
+  // 「模糊查詢 → Enter → 清空 → 新查詢 → 數候選」序列,而不是去斷言 reader。
+  it('多部候選時按 Enter,下一個查詢仍列出全部候選,摘要不縮水', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpusShortArticles);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await user.clear(input);
+    await user.type(input, '1');
+
+    // 四部核心法規都有第 1 條。若剛才的 Enter 把民法確認成脈絡,這裡會塌成
+    // 一部,摘要會宣告「共 1 條命中,分布於 1 部法規」——其餘三部的第 1 條
+    // 憑空消失,而使用者無從得知自己漏掉了什麼(§6.3)。
+    await waitFor(() =>
+      expect(document.querySelector('.summary')?.textContent)
+        .toBe('共 4 條命中,分布於 4 部法規')
+    );
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+    expect([...document.querySelectorAll('.group-title')].map((e) => e.firstChild?.textContent))
+      .toEqual(['民法', '民事訴訟法', '刑法', '刑事訴訟法']);
+  });
+
+  it('使用者自己用方向鍵選過之後,Enter 仍讓該法規成為後續查詢的脈絡', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpusShortArticles);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+
+    // 使用者主動選取(§5.5 情境一 的正當來源),不是系統猜的
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => expect(readerLaw()).toBe('民事訴訟法'));
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await user.clear(input);
+    await user.type(input, '1');
+
+    await waitFor(() => expect(readerLaw()).toBe('民事訴訟法'));
+    expect(targetArticleId()).toBe('article-1');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
   });
 });
 
@@ -473,6 +533,34 @@ describe('左欄分頁(搜尋 / 目錄)', () => {
     await waitFor(() => expect(targetArticleId()).toBe('article-184'));
     expect(readerLaw()).toBe('刑法');
     expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('目錄分頁按 Enter 不把左欄殘留的查詢字串記成「最近查詢」', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    // 殘留的查詢字串:切到目錄之後它還在左欄上方的搜尋框裡
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    await user.click(screen.getByRole('tab', { name: '目錄' }));
+    fireEvent.keyDown(window, { key: 'Enter' });   // ← 不該寫入任何紀錄
+
+    // 對照組:同一個手勢在搜尋分頁確實會寫入。它排在上面那一次之後,而
+    // IndexedDB 依送出順序處理請求——所以只要下面讀到了「185」,任何來自
+    // 目錄分頁的「184」也必定已經落地、必定會一起被讀出來。這個先後順序讓
+    // 「184 不在清單裡」成為確定的結論,而不是搶在寫入完成前的假綠燈。
+    await user.clear(input);
+    await user.type(input, '185');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await user.clear(input);
+    await waitFor(() => {
+      const items = [...document.querySelectorAll('.item-text')].map((e) => e.textContent);
+      expect(items).toEqual(['民法 185']);
+    });
   });
 
   it('目錄分頁下方向鍵不會偷偷移動看不見的搜尋選取', async () => {

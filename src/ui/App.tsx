@@ -188,11 +188,18 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     onMove: selectAndFollow,
     onEnter: () => {
       readerRef.current?.focus();
-      // Enter 是使用者明確動作(§5.5 情境一「即將到來的點目錄」同一類):
-      // 把目前顯示中的 displayTarget(可能只是候選不只一部時的預覽)提升為
-      // reader,而不是只有已經被自動確認或使用者選取過的才算數——否則畫面上
-      // 明明顯示著某條文,Enter/Cmd+D 卻表現得像什麼都沒開啟。
-      if (displayTarget) setReader(displayTarget);
+      // Enter 只在「已無可猜之處」時把顯示中的條文確認為脈絡:候選已收斂到
+      // 唯一一部(§5.5 情境一),或使用者已經自己選過(reader 非 null)。
+      //
+      // 候選不只一部而使用者尚未選取時,Enter 只是「進入閱讀」(§7.2),不替他
+      // 決定脈絡法規——Enter 這個按鍵不帶任何「使用者指的是四部裡的哪一部」的
+      // 資訊,民法排第一只是因為 search.ts 依分類順序回傳。若在這裡確認,它會
+      // 經由 ctxPcode 靜默收窄之後的每一個查詢(且 Escape 清不掉),下一個
+      // 純數字查詢就會少報候選——那正是 C1 的病灶,只是拿按鍵當掩護。
+      //
+      // addHistory 與 onBookmark 仍讀 displayTarget:它們是對「畫面上顯示的
+      // 這一條」動作,不涉及脈絡,不受這個守衛影響。
+      if (displayTarget && (reader || outcome.totalLaws <= 1)) setReader(displayTarget);
       // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
       // 尚未跳轉時寫入沒有意義的紀錄。在目錄分頁按 Enter 也不寫:使用者是在
       // 逐層點目錄,不是在查詢,把左欄殘留的查詢字串記成「最近查詢」是謊報。
