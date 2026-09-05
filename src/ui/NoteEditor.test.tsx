@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NoteEditor } from './NoteEditor';
-import { openLawDb, getNote, articleKey, type LawDb, type Note } from '../store/db';
+import { openLawDb, getNote, putNote, articleKey, type LawDb, type Note } from '../store/db';
 
 let db: LawDb;
 let n = 0;
@@ -97,5 +97,61 @@ describe('NoteEditor', () => {
     expect(screen.getByText(/筆記功能暫時無法使用/)).toBeDefined();
     expect(screen.queryByRole('button', { name: /新增筆記/ })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('新筆記輸入後 blur,文字留在畫面上,不會塌回新增按鈕(review round 2 regression A)', async () => {
+    render(<NoteEditor {...base} note={undefined} db={db} />);
+    await userEvent.click(screen.getByRole('button', { name: /新增筆記/ }));
+    await userEvent.type(await screen.findByRole('textbox'), 'AB');
+    await userEvent.tab(); // blur
+
+    expect(screen.queryByRole('button', { name: /新增筆記/ })).toBeNull();
+    expect(document.querySelector('.note-preview')?.textContent).toContain('AB');
+  });
+
+  it('既有筆記編輯後 blur,再點回編輯不會被還沒落地的 note prop 蓋掉字元(review round 2 regression A)', async () => {
+    render(<NoteEditor {...base} note={note('X')} db={db} />);
+    await userEvent.click(document.querySelector('.note-preview')!);
+    await userEvent.type(await screen.findByRole('textbox'), 'Y'); // X -> XY
+    await userEvent.tab(); // blur,觸發立即補存(非同步進行中,尚未回頭更新 note prop)
+
+    await userEvent.click(document.querySelector('.note-preview')!); // 補存落地前點回編輯
+    const ta = (await screen.findByRole('textbox')) as HTMLTextAreaElement;
+    expect(ta.value).toBe('XY'); // 不能被 props 裡還沒更新的舊 note.body("X")蓋掉
+
+    await userEvent.type(ta, 'Z');
+    await waitFor(
+      async () => expect((await getNote(db, 'B0000001', '184'))?.body).toBe('XYZ'),
+      { timeout: 3000 }
+    );
+  });
+
+  it('切到另一部法規但條號相同(元件被 React 重用)時,草稿補存到正確的條文,不會誤寫進新條文(review round 2 regression B)', async () => {
+    // 法規 B 已有自己的筆記與版本,且從未被使用者打開過。
+    await putNote(db, 'LAW_B', '1', 'B的舊筆記', '20200101');
+
+    const { rerender, unmount } = render(
+      <NoteEditor pcode="LAW_A" no="1" lawUpdated="20260817" note={undefined} db={db} onSaved={() => {}} />
+    );
+    await userEvent.click(screen.getByRole('button', { name: /新增筆記/ }));
+    await userEvent.type(await screen.findByRole('textbox'), 'A的新草稿');
+
+    // 還沒等到 500ms debounce,使用者切去另一部法規;React 依 key={b.no} 重用
+    // 同一個元件實例,pcode/lawUpdated/note 都換成法規 B 的。
+    const bNote: Note = {
+      key: articleKey('LAW_B', '1'), pcode: 'LAW_B', no: '1',
+      body: 'B的舊筆記', updatedAt: 1, lawVersionAtWrite: '20200101',
+    };
+    rerender(
+      <NoteEditor pcode="LAW_B" no="1" lawUpdated="20260817" note={bNote} db={db} onSaved={() => {}} />
+    );
+    unmount();
+
+    await waitFor(
+      async () => expect((await getNote(db, 'LAW_A', '1'))?.body).toBe('A的新草稿')
+    );
+    const bAfter = await getNote(db, 'LAW_B', '1');
+    expect(bAfter?.body).toBe('B的舊筆記');
+    expect(bAfter?.lawVersionAtWrite).toBe('20200101');
   });
 });
