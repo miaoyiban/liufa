@@ -29,17 +29,17 @@ describe('articleDomId', () => {
 
 describe('ReaderPane', () => {
   it('未選法規時顯示提示', () => {
-    render(<ReaderPane law={null} targetNo={null} hitsByNo={new Map()} />);
+    render(<ReaderPane law={null} targetNo={null} hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     expect(screen.getByText(/輸入關鍵字或條號/)).toBeDefined();
   });
 
   it('渲染整部法規的全部條文,不做虛擬捲動', () => {
-    const { container } = render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} />);
+    const { container } = render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     expect(container.querySelectorAll('article')).toHaveLength(3);
   });
 
   it('渲染編章節標題並保留層級', () => {
-    const { container } = render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} />);
+    const { container } = render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     const divisions = container.querySelectorAll('.division');
     expect(divisions).toHaveLength(2);
     expect(divisions[0]!.getAttribute('data-level')).toBe('0');
@@ -47,27 +47,27 @@ describe('ReaderPane', () => {
   });
 
   it('條文各項分段渲染', () => {
-    const { container } = render(<ReaderPane law={law} targetNo="184" hitsByNo={new Map()} />);
+    const { container } = render(<ReaderPane law={law} targetNo="184" hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     const article = container.querySelector('#article-184')!;
     expect(article.querySelectorAll('p')).toHaveLength(2);
   });
 
   it('targetNo 變更時捲動到該條', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView');
-    const { rerender } = render(<ReaderPane law={law} targetNo="183" hitsByNo={new Map()} />);
+    const { rerender } = render(<ReaderPane law={law} targetNo="183" hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     spy.mockClear();
-    rerender(<ReaderPane law={law} targetNo="184-1" hitsByNo={new Map()} />);
+    rerender(<ReaderPane law={law} targetNo="184-1" hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     expect(spy).toHaveBeenCalled();
   });
 
   it('套用命中高亮', () => {
     const hits = new Map([['184', [{ start: 1, length: 2 }]]]);
-    const { container } = render(<ReaderPane law={law} targetNo="184" hitsByNo={hits} />);
+    const { container } = render(<ReaderPane law={law} targetNo="184" hitsByNo={hits} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     expect(container.querySelector('#article-184 mark')?.textContent).toBe('故意');
   });
 
   it('顯示法規名稱與資料版本', () => {
-    render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} />);
+    render(<ReaderPane law={law} targetNo={null} hitsByNo={new Map()} notes={new Map()} db={null} onNoteSaved={() => {}} />);
     expect(screen.getByText('民法')).toBeDefined();
     expect(screen.getByText(/2026-08-17/)).toBeDefined();
   });

@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { Article, Law } from '../core/types';
 import type { Hit } from '../core/search';
 import { Highlight } from './Highlight';
+import { NoteEditor } from './NoteEditor';
+import { articleKey, type LawDb, type Note } from '../store/db';
 
 export function articleDomId(no: string): string {
   return `article-${no}`;
@@ -16,9 +18,12 @@ type Props = {
   law: Law | null;
   targetNo: string | null;
   hitsByNo: Map<string, Hit[]>;
+  notes: Map<string, Note>;
+  db: LawDb | null;
+  onNoteSaved: () => void;
 };
 
-export function ReaderPane({ law, targetNo, hitsByNo }: Props) {
+export function ReaderPane({ law, targetNo, hitsByNo, notes, db, onNoteSaved }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,8 +56,13 @@ export function ReaderPane({ law, targetNo, hitsByNo }: Props) {
         ) : (
           <ArticleBlock
             key={b.no}
+            pcode={law.pcode}
+            lawUpdated={law.updated}
             article={b}
             hits={hitsByNo.get(b.no) ?? []}
+            note={notes.get(articleKey(law.pcode, b.no))}
+            db={db}
+            onNoteSaved={onNoteSaved}
             isTarget={b.no === targetNo}
           />
         )
@@ -62,8 +72,11 @@ export function ReaderPane({ law, targetNo, hitsByNo }: Props) {
 }
 
 function ArticleBlock({
-  article, hits, isTarget,
-}: { article: Article; hits: Hit[]; isTarget: boolean }) {
+  pcode, lawUpdated, article, hits, note, db, onNoteSaved, isTarget,
+}: {
+  pcode: string; lawUpdated: string; article: Article; hits: Hit[];
+  note: Note | undefined; db: LawDb | null; onNoteSaved: () => void; isTarget: boolean;
+}) {
   // 命中位置是對整段 text 的偏移,分段渲染時要換算到各段的區間
   let offset = 0;
   const paragraphs = article.text.split('\n').map((line) => {
@@ -83,6 +96,14 @@ function ArticleBlock({
           <Highlight text={p.line} hits={p.hits} />
         </p>
       ))}
+      <NoteEditor
+        pcode={pcode}
+        no={article.no}
+        lawUpdated={lawUpdated}
+        note={note}
+        db={db}
+        onSaved={onNoteSaved}
+      />
     </article>
   );
 }

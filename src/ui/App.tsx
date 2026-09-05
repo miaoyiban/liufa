@@ -6,6 +6,7 @@ import { search } from '../core/search';
 import { ResultList, flatResults } from './ResultList';
 import { ReaderPane } from './ReaderPane';
 import { useKeyboard } from './useKeyboard';
+import { useLawDb, useNotes } from './useLawDb';
 import type { Law } from '../core/types';
 import type { Hit } from '../core/search';
 import './app.css';
@@ -34,6 +35,8 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [query, setQuery] = useState('');
   const [reader, setReader] = useState<ReaderTarget>(null);
   const [selected, setSelected] = useState(0);
+  const db = useLawDb();
+  const { notes, reload: reloadNotes } = useNotes(db);
 
   const index = useMemo(() => new AliasIndex(corpus.laws), [corpus]);
   const outcome = useMemo(
@@ -125,7 +128,14 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
         </div>
       </div>
       <div className="pane-right" ref={readerRef} tabIndex={-1}>
-        <ReaderPane law={law} targetNo={reader?.no ?? null} hitsByNo={hitsByNo} />
+        <ReaderPane
+          law={law}
+          targetNo={reader?.no ?? null}
+          hitsByNo={hitsByNo}
+          notes={notes}
+          db={db}
+          onNoteSaved={reloadNotes}
+        />
       </div>
     </div>
   );

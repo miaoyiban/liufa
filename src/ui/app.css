@@ -96,3 +96,17 @@ mark { background: var(--mark); color: inherit; }
 .article-no { display: block; color: var(--accent); font-size: 0.9rem; }
 .article p { margin: 0.25rem 0; }
 .article-target { background: #fffdf2; }
+
+.note { margin: 0.5rem 0 0; border-left: 3px solid #ffd85c; padding-left: 0.75rem; }
+.note-preview { font-size: 0.9rem; cursor: text; }
+.note-preview :first-child { margin-top: 0; }
+.note-input {
+  width: 100%; min-height: 5rem; font: inherit; font-size: 0.9rem;
+  border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem; resize: vertical;
+}
+.note-warning { font-size: 0.8rem; color: #a05a00; margin-bottom: 0.35rem; }
+.note-add {
+  border: 0; background: none; color: var(--muted); font: inherit;
+  font-size: 0.85rem; cursor: pointer; padding: 0.2rem 0; opacity: 0;
+}
+.article:hover .note-add, .article-target .note-add { opacity: 1; }
