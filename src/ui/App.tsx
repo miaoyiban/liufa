@@ -6,6 +6,7 @@ import { search } from '../core/search';
 import { ResultList, flatResults } from './ResultList';
 import { ReaderPane } from './ReaderPane';
 import { SidePanel } from './SidePanel';
+import { TocPane } from './TocPane';
 import { useKeyboard } from './useKeyboard';
 import { useBookmarks, useLawDb, useNotes } from './useLawDb';
 import { addHistory, toggleBookmark } from '../store/db';
@@ -60,8 +61,12 @@ export function App() {
   return <Workspace corpus={status.corpus} />;
 }
 
+/** 左欄分頁:搜尋與目錄並存,不是「查詢框空的時候才出現目錄」。 */
+type Tab = 'search' | 'toc';
+
 function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<Tab>('search');
   const [reader, setReader] = useState<ReaderTarget>(null);
   const [selected, setSelected] = useState(0);
   // 書籤變動後用來強制 SidePanel 重新掛載、重新讀取清單(見下方 onBookmark)。
@@ -173,7 +178,12 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   };
 
   useKeyboard({
-    count: flat.length,
+    // 目錄分頁沒有「候選清單」這回事,方向鍵無處可移。count 給 0 讓
+    // useKeyboard 直接放行方向鍵,否則按上下會移動一個看不見的搜尋選取,
+    // 右欄卻莫名其妙地跳條文。其餘鍵位在兩個分頁下的意義相同,維持原樣:
+    // `[`/`]` 跳右欄的編章、Cmd+D 對右欄顯示中的條文加書籤(從目錄點開一條
+    // 後正想做的事)、Escape 與可列印字元把焦點交回搜尋框。
+    count: tab === 'search' ? flat.length : 0,
     selected,
     onMove: selectAndFollow,
     onEnter: () => {
@@ -184,8 +194,9 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
       // 明明顯示著某條文,Enter/Cmd+D 卻表現得像什麼都沒開啟。
       if (displayTarget) setReader(displayTarget);
       // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
-      // 尚未跳轉時寫入沒有意義的紀錄。
-      if (db && displayTarget && query) {
+      // 尚未跳轉時寫入沒有意義的紀錄。在目錄分頁按 Enter 也不寫:使用者是在
+      // 逐層點目錄,不是在查詢,把左欄殘留的查詢字串記成「最近查詢」是謊報。
+      if (db && displayTarget && query && tab === 'search') {
         addHistory(db, { ts: Date.now(), query, pcode: displayTarget.pcode, no: displayTarget.no })
           .catch((err) => console.error('寫入最近查詢失敗', err));
       }
@@ -225,17 +236,44 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     <div className="app">
       <div className="pane-left">
         <UpdateBanner visible={updateReady} onReload={() => performUpdate?.()} />
+        {/* 搜尋框不屬於任何一個分頁,兩個分頁下都在。§7.2「焦點預設永遠在
+            搜尋框,開啟即可打字」靠的就是它隨時可聚焦——把它藏進搜尋分頁,
+            在目錄分頁打字就會再次靜默消失(那正是 §7.2 修掉的 bug)。
+            反過來,在目錄分頁打字代表使用者要查詢,順手切回搜尋分頁。 */}
         <input
           ref={inputRef}
           className="search-input"
           autoFocus
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setTab('search'); }}
           placeholder="民184 / 過失 / 民法 損害賠償"
           aria-label="搜尋法條"
         />
         {notice && <div className="notice" role="status">{notice}</div>}
-        <div className="result-scroll">
+        <div className="tabs" role="tablist">
+          <button
+            type="button" role="tab" id="tab-search" aria-controls="panel-search"
+            aria-selected={tab === 'search'}
+            className={tab === 'search' ? 'tab tab-active' : 'tab'}
+            onClick={() => setTab('search')}
+          >
+            搜尋
+          </button>
+          <button
+            type="button" role="tab" id="tab-toc" aria-controls="panel-toc"
+            aria-selected={tab === 'toc'}
+            className={tab === 'toc' ? 'tab tab-active' : 'tab'}
+            onClick={() => setTab('toc')}
+          >
+            目錄
+          </button>
+        </div>
+        {/* 兩個分頁都保持掛載、用 hidden 切換顯示,各自的狀態才留得住:切到
+            目錄再切回搜尋,查詢與結果還在;切回目錄,展開到哪裡也還在。 */}
+        <div
+          className="result-scroll" role="tabpanel" id="panel-search"
+          aria-labelledby="tab-search" hidden={tab !== 'search'}
+        >
           {query === '' ? (
             <SidePanel key={dbVersion} db={db} corpus={corpus} onOpen={setReader} />
           ) : (
@@ -253,6 +291,14 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
               <ResultList groups={outcome.groups} selected={selected} onSelect={selectAndFollow} />
             </>
           )}
+        </div>
+        <div
+          className="result-scroll" role="tabpanel" id="panel-toc"
+          aria-labelledby="tab-toc" hidden={tab !== 'toc'}
+        >
+          {/* 點目錄設定 reader 是明確的使用者意圖,和方向鍵選取候選同一類,
+              因此直接走 setReader——它會成為下一次查詢的脈絡法規(§5.5 情境一)。 */}
+          <TocPane corpus={corpus} reader={reader} onOpen={setReader} />
         </div>
         <DataVersion sourceUpdatedAt={corpus.sourceUpdatedAt} />
       </div>

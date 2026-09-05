@@ -41,6 +41,43 @@ body {
 
 .result-scroll { flex: 1; overflow-y: auto; }
 
+/* 左欄分頁:搜尋 / 目錄 */
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tab {
+  flex: 1; font: inherit; font-size: 0.85rem; padding: 0.5rem 0;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  color: var(--muted); cursor: pointer;
+}
+.tab:hover { background: #fafafa; }
+.tab-active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* 目錄 */
+.toc { padding-bottom: 1rem; }
+.toc-group {
+  position: sticky; top: 0; z-index: 1; background: var(--bg);
+  padding: 0.5rem 1rem 0.35rem; font-size: 0.8rem; font-weight: 600;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-law, .toc-division, .toc-article, .toc-back {
+  display: block; width: 100%; text-align: left; font: inherit;
+  border: 0; background: none; cursor: pointer; color: inherit;
+  padding: 0.35rem 1rem;
+}
+.toc-law:hover, .toc-division:hover, .toc-article:hover, .toc-back:hover { background: #fafafa; }
+.toc-law { border-bottom: 1px solid #f3f3f3; }
+.toc-back { color: var(--accent); font-size: 0.85rem; border-bottom: 1px solid var(--line); }
+.toc-title {
+  padding: 0.5rem 1rem 0.35rem; font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.toc-division { font-size: 0.85rem; font-weight: 600; }
+/* 收合/展開的三角標記,靠 aria-expanded 驅動,不另外放一個圖示節點 */
+.toc-division::before { content: '▸ '; color: var(--muted); }
+.toc-division[aria-expanded='true']::before { content: '▾ '; }
+.toc-article { font-size: 0.85rem; color: var(--muted); }
+.toc-current { color: var(--accent); background: var(--sel); font-weight: 600; }
+
 .notice {
   padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--muted);
   border-bottom: 1px solid var(--line); background: #fafafa;

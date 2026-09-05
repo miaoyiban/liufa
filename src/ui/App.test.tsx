@@ -438,6 +438,61 @@ describe('離線更新橫幅的重新載入接線', () => {
   });
 });
 
+describe('左欄分頁(搜尋 / 目錄)', () => {
+  it('切到目錄再切回搜尋,查詢字串與結果都還在', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+
+    await user.click(screen.getByRole('tab', { name: '目錄' }));
+    // 目錄分頁顯示的是法規清單,搜尋結果暫時退場(但沒有被丟掉)
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '刑法' })).toBeDefined();
+
+    await user.click(screen.getByRole('tab', { name: '搜尋' }));
+    expect((input as HTMLInputElement).value).toBe('184');
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+  });
+
+  it('從目錄點條文:右欄跳過去,而且成為下一次查詢的脈絡法規(§5.5 情境一)', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.click(screen.getByRole('tab', { name: '目錄' }));
+    await user.click(screen.getByRole('button', { name: '刑法' }));
+    await user.click(screen.getByRole('button', { name: '第 185 條' }));
+
+    await waitFor(() => expect(readerLaw()).toBe('刑法'));
+    expect(targetArticleId()).toBe('article-185');
+
+    // 點目錄是明確的使用者意圖,不是系統猜的:接著查純數字條號時,四部核心
+    // 法規都有第 184 條,但脈絡已經是刑法,候選應該只剩一部。
+    await user.type(input, '184');
+    await waitFor(() => expect(targetArticleId()).toBe('article-184'));
+    expect(readerLaw()).toBe('刑法');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('目錄分頁下方向鍵不會偷偷移動看不見的搜尋選取', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    await user.click(screen.getByRole('tab', { name: '目錄' }));
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+
+    // 留在搜尋分頁的話,兩次 ArrowDown 會把右欄換成刑法
+    expect(readerLaw()).toBe('民法');
+    await user.click(screen.getByRole('tab', { name: '搜尋' }));
+    expect(screen.getByRole('option', { name: /民法/ }).getAttribute('aria-selected')).toBe('true');
+  });
+});
+
 describe('divisionJumpTargets(A-2:`[`/`]` 只跳編章,不跳節款目)', () => {
   it('只保留 level 0、1(編、章),節/款/目被濾掉', () => {
     // 編(0) 章(1) 節(2) 款(3) 章(1) 目(4)
