@@ -7,7 +7,7 @@ export function UpdateBanner({
 }: { visible: boolean; onReload: () => void }) {
   if (!visible) return null;
   return (
-    <div className="update-banner">
+    <div className="update-banner" role="status" aria-live="polite">
       法規資料有更新
       <button onClick={onReload}>重新載入</button>
     </div>
@@ -19,6 +19,6 @@ export function DataVersion({ sourceUpdatedAt }: { sourceUpdatedAt: string }) {
   const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})/.exec(sourceUpdatedAt);
   const text = m
     ? `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}`
-    : sourceUpdatedAt;
+    : sourceUpdatedAt || '未知';
   return <div className="data-version">資料版本 {text}</div>;
 }

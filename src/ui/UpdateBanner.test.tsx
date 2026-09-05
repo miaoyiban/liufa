@@ -34,4 +34,9 @@ describe('DataVersion', () => {
     render(<DataVersion sourceUpdatedAt="未知" />);
     expect(screen.getByText('資料版本 未知')).toBeDefined();
   });
+
+  it('空字串時顯示未知,不留下沒有內容的空白', () => {
+    render(<DataVersion sourceUpdatedAt="" />);
+    expect(screen.getByText('資料版本 未知')).toBeDefined();
+  });
 });

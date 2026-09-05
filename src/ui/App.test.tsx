@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { App } from './App';
+import { App, setUpdateAvailable, setUpdateHandler } from './App';
 import type { Corpus } from '../core/types';
 
 beforeAll(() => {
@@ -70,5 +70,38 @@ describe('Workspace 單向同步(左欄選取 → 右欄跳轉)', () => {
     expect(targetArticleId()).toBe('article-185');
     const selectedOption = screen.getByRole('option', { name: /第 185 條/ });
     expect(selectedOption.getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+describe('離線更新橫幅的重新載入接線', () => {
+  afterEach(() => {
+    // 避免這裡設的模組層級狀態滲漏到其他測試。此時 Workspace 可能仍掛載著
+    // (testing-library 的自動 cleanup 尚未執行),setUpdateAvailable 會觸發
+    // 真正的 React state 更新,所以要包在 act() 裡,否則會出現「不在 act()
+    // 範圍內更新」的警告。
+    act(() => {
+      setUpdateAvailable(false);
+      setUpdateHandler(null);
+    });
+  });
+
+  it('點擊重新載入時呼叫已註冊的更新處理函式,而非單純重整頁面', async () => {
+    const user = userEvent.setup();
+    await renderReady();
+
+    const updateSW = vi.fn();
+    act(() => {
+      setUpdateHandler(updateSW);
+      setUpdateAvailable(true);
+    });
+
+    const button = await screen.findByRole('button', { name: /重新載入/ });
+    await user.click(button);
+
+    // 這裡釘住的是 App.tsx 內的接線本身:點擊呼叫的是外部註冊進來的
+    // 處理函式,而不是 App 自己直接呼叫 location.reload()。真正送出
+    // skip-waiting 訊息、啟用新 Service Worker 的邏輯屬於 main.tsx,
+    // 不在單元測試環境(jsdom 沒有 Service Worker)可驗證的範圍內。
+    expect(updateSW).toHaveBeenCalledTimes(1);
   });
 });

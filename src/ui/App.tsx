@@ -21,6 +21,13 @@ export type ReaderTarget = { pcode: string; no: string } | null;
 let notifyUpdate: ((v: boolean) => void) | null = null;
 export function setUpdateAvailable(v: boolean) { notifyUpdate?.(v); }
 
+// main.tsx 把「送出 skip-waiting 訊息、啟用等待中的新 Service Worker」的函式
+// 放進這裡。UpdateBanner 按下重新載入時呼叫的正是這個函式,而不是單純的
+// location.reload()——單純重新整理不會啟用新的 worker,拿到的仍是舊 worker
+// 快取的舊版內容,使用者按了按鈕卻什麼都沒變。
+let performUpdate: (() => void) | null = null;
+export function setUpdateHandler(fn: (() => void) | null) { performUpdate = fn; }
+
 export function App() {
   const status = useCorpus();
 
@@ -133,7 +140,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   return (
     <div className="app">
       <div className="pane-left">
-        <UpdateBanner visible={updateReady} onReload={() => location.reload()} />
+        <UpdateBanner visible={updateReady} onReload={() => performUpdate?.()} />
         <input
           ref={inputRef}
           className="search-input"
