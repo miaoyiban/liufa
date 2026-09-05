@@ -122,3 +122,18 @@ mark { background: var(--mark); color: inherit; }
 }
 .transfer-import input { display: none; }
 .transfer-msg { flex-basis: 100%; font-size: 0.8rem; color: var(--muted); }
+
+.update-banner {
+  padding: 0.6rem 1rem; background: #eef6ff; font-size: 0.85rem;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.update-banner button {
+  font: inherit; font-size: 0.8rem; border: 1px solid var(--accent);
+  color: var(--accent); background: none; border-radius: 4px;
+  padding: 0.2rem 0.5rem; cursor: pointer;
+}
+.data-version {
+  padding: 0.5rem 1rem; border-top: 1px solid var(--line);
+  font-size: 0.75rem; color: var(--muted);
+}

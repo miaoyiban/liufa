@@ -9,11 +9,17 @@ import { SidePanel } from './SidePanel';
 import { useKeyboard } from './useKeyboard';
 import { useLawDb, useNotes } from './useLawDb';
 import { addHistory, toggleBookmark } from '../store/db';
+import { UpdateBanner, DataVersion } from './UpdateBanner';
 import type { Law } from '../core/types';
 import type { Hit } from '../core/search';
 import './app.css';
 
 export type ReaderTarget = { pcode: string; no: string } | null;
+
+// Service Worker 偵測到新版時透過此訂閱點通知目前掛載的 Workspace。
+// 不自動靜默更新:只標記狀態,重新載入與否由使用者在 UpdateBanner 決定。
+let notifyUpdate: ((v: boolean) => void) | null = null;
+export function setUpdateAvailable(v: boolean) { notifyUpdate?.(v); }
 
 export function App() {
   const status = useCorpus();
@@ -39,8 +45,14 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [selected, setSelected] = useState(0);
   // 書籤變動後用來強制 SidePanel 重新掛載、重新讀取清單(見下方 onBookmark)。
   const [dbVersion, setDbVersion] = useState(0);
+  const [updateReady, setUpdateReady] = useState(false);
   const db = useLawDb();
   const { notes, reload: reloadNotes } = useNotes(db);
+
+  useEffect(() => {
+    notifyUpdate = setUpdateReady;
+    return () => { notifyUpdate = null; };
+  }, []);
 
   const index = useMemo(() => new AliasIndex(corpus.laws), [corpus]);
   const outcome = useMemo(
@@ -121,6 +133,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   return (
     <div className="app">
       <div className="pane-left">
+        <UpdateBanner visible={updateReady} onReload={() => location.reload()} />
         <input
           ref={inputRef}
           className="search-input"
@@ -149,6 +162,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
             </>
           )}
         </div>
+        <DataVersion sourceUpdatedAt={corpus.sourceUpdatedAt} />
       </div>
       <div className="pane-right" ref={readerRef} tabIndex={-1}>
         <ReaderPane
