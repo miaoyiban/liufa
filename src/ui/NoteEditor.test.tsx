@@ -4,7 +4,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NoteEditor } from './NoteEditor';
+import { renderMarkdown } from './markdown';
 import { openLawDb, getNote, putNote, articleKey, type LawDb, type Note } from '../store/db';
+
+// 真的渲染 Markdown,只是額外記錄有沒有被呼叫。
+vi.mock('./markdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./markdown')>();
+  return { ...actual, renderMarkdown: vi.fn(actual.renderMarkdown) };
+});
 
 let db: LawDb;
 let n = 0;
@@ -52,6 +59,19 @@ describe('NoteEditor', () => {
   it('筆記寫於修法之前時顯示警示', () => {
     render(<NoteEditor {...base} note={note('舊筆記', '20240101')} db={db} />);
     expect(screen.getByText(/修正前/)).toBeDefined();
+  });
+
+  it('沒有內容時完全不做 Markdown 渲染(整部法規會掛載上千個空編輯器)', () => {
+    vi.mocked(renderMarkdown).mockClear();
+    render(<NoteEditor {...base} note={undefined} db={db} />);
+    expect(screen.getByRole('button', { name: /新增筆記/ })).toBeDefined();
+    expect(renderMarkdown).not.toHaveBeenCalled();
+  });
+
+  it('有內容時照常渲染 Markdown', () => {
+    vi.mocked(renderMarkdown).mockClear();
+    render(<NoteEditor {...base} note={note('# 侵權行為')} db={db} />);
+    expect(renderMarkdown).toHaveBeenCalledWith('# 侵權行為');
   });
 
   it('渲染時不讀取資料庫(避免整部法規觸發 N 次查詢)', () => {

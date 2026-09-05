@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { listNotes, openLawDb, type LawDb, type Note } from '../store/db';
+import { useCallback, useEffect, useState } from 'react';
+import { listBookmarks, listNotes, openLawDb, type LawDb, type Note } from '../store/db';
 
 /**
  * db 維持 null 代表「筆記功能目前不可用」——不論原因是還在開啟中,
@@ -39,5 +39,33 @@ export function useNotes(db: LawDb | null): { notes: Map<string, Note>; reload: 
     return () => { cancelled = true; };
   }, [db, tick]);
 
-  return { notes, reload: () => setTick((t) => t + 1) };
+  // reload 的參照必須穩定:它一路傳到每一個 ArticleBlock/NoteEditor 當 prop,
+  // 每次 render 都換一個新函式會讓 ArticleBlock 的 React.memo 完全失效,
+  // 於是每存一次筆記就重新調和整部法規的 1,439 條。
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+
+  return { notes, reload };
+}
+
+/** 一次載入全部書籤的 key,供閱讀區在條號旁顯示書籤標記(理由同 useNotes)。 */
+export function useBookmarks(db: LawDb | null): { bookmarks: Set<string>; reload: () => void } {
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!db) return;
+    let cancelled = false;
+    listBookmarks(db)
+      .then((all) => {
+        if (!cancelled) setBookmarks(new Set(all.map((b) => b.key)));
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('讀取書籤清單失敗', err);
+      });
+    return () => { cancelled = true; };
+  }, [db, tick]);
+
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+
+  return { bookmarks, reload };
 }

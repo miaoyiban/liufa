@@ -26,6 +26,20 @@ describe('SidePanel', () => {
     expect(await screen.findByText(/還沒有書籤/)).toBeDefined();
   });
 
+  it('讀取失敗時說明失敗,而不是謊報「還沒有資料」', async () => {
+    await toggleBookmark(db, 'B0000001', '184');
+    db.close(); // 連線關閉後所有讀取都會拋錯
+    // 這裡預期會走到 console.error 的錯誤路徑,靜音以保持測試輸出乾淨
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<SidePanel db={db} corpus={corpus} onOpen={() => {}} />);
+
+    expect(await screen.findByText(/讀取本機資料失敗/)).toBeDefined();
+    expect(screen.queryByText(/還沒有書籤/)).toBeNull();
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
   it('列出書籤,顯示法規簡稱與條號', async () => {
     await toggleBookmark(db, 'B0000001', '184');
     render(<SidePanel db={db} corpus={corpus} onOpen={() => {}} />);

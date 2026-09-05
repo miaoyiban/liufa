@@ -5,7 +5,8 @@ import { formatLawDate } from '../core/date';
 
 // 匯入的 style / style 屬性可以整頁改版(例如把警示文字藏起來),
 // 而 DOMPurify 預設 profile 並不會擋掉這兩者,要另外加進黑名單。
-const SANITIZE_CONFIG = { FORBID_TAGS: ['style'], FORBID_ATTR: ['style'] };
+// form 同理:匯入的筆記可以渲染出一個往外站 POST 的表單。
+const SANITIZE_CONFIG = { FORBID_TAGS: ['style', 'form'], FORBID_ATTR: ['style'] };
 
 /**
  * 渲染筆記。必須 sanitize:匯入功能會接受外部 JSON 檔,

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { Article, Law } from '../core/types';
 import type { Hit } from '../core/search';
 import { formatLawDate } from '../core/date';
@@ -10,16 +10,21 @@ export function articleDomId(no: string): string {
   return `article-${no}`;
 }
 
+/** 無命中時共用同一個陣列;每次 render 都給 `[]` 會讓 ArticleBlock 的 memo 失效。 */
+const NO_HITS: Hit[] = [];
+
 type Props = {
   law: Law | null;
   targetNo: string | null;
   hitsByNo: Map<string, Hit[]>;
   notes: Map<string, Note>;
+  /** 已加書籤條文的 key(articleKey);用來在條號旁顯示標記 */
+  bookmarks: Set<string>;
   db: LawDb | null;
   onNoteSaved: () => void;
 };
 
-export function ReaderPane({ law, targetNo, hitsByNo, notes, db, onNoteSaved }: Props) {
+export function ReaderPane({ law, targetNo, hitsByNo, notes, bookmarks, db, onNoteSaved }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,8 +60,9 @@ export function ReaderPane({ law, targetNo, hitsByNo, notes, db, onNoteSaved }: 
             pcode={law.pcode}
             lawUpdated={law.updated}
             article={b}
-            hits={hitsByNo.get(b.no) ?? []}
+            hits={hitsByNo.get(b.no) ?? NO_HITS}
             note={notes.get(articleKey(law.pcode, b.no))}
+            bookmarked={bookmarks.has(articleKey(law.pcode, b.no))}
             db={db}
             onNoteSaved={onNoteSaved}
             isTarget={b.no === targetNo}
@@ -67,11 +73,16 @@ export function ReaderPane({ law, targetNo, hitsByNo, notes, db, onNoteSaved }: 
   );
 }
 
-function ArticleBlock({
-  pcode, lawUpdated, article, hits, note, db, onNoteSaved, isTarget,
+// memo:存一次筆記就會重建整個 notes Map 並重新 render ReaderPane,沒有 memo
+// 的話整部民法 1,439 條會全部重新調和(每次 debounce 存檔都付一次)。props 全是
+// 原始值或穩定參照(article 來自 corpus、hits 空時共用 NO_HITS、onNoteSaved 已
+// useCallback),因此淺比較足夠。
+const ArticleBlock = memo(function ArticleBlock({
+  pcode, lawUpdated, article, hits, note, bookmarked, db, onNoteSaved, isTarget,
 }: {
   pcode: string; lawUpdated: string; article: Article; hits: Hit[];
-  note: Note | undefined; db: LawDb | null; onNoteSaved: () => void; isTarget: boolean;
+  note: Note | undefined; bookmarked: boolean;
+  db: LawDb | null; onNoteSaved: () => void; isTarget: boolean;
 }) {
   // 命中位置是對整段 text 的偏移,分段渲染時要換算到各段的區間
   let offset = 0;
@@ -86,7 +97,13 @@ function ArticleBlock({
 
   return (
     <article id={articleDomId(article.no)} className={isTarget ? 'article article-target' : 'article'}>
-      <b className="article-no">{article.label}</b>
+      {/* §8.2:有筆記的條文在條號旁顯示標記;書籤同理——否則 Cmd+D 是一個
+          完全看不出結果的開關,1,439 條的閱讀區裡也無從得知哪幾條有筆記。 */}
+      <b className="article-no">
+        {article.label}
+        {bookmarked && <span className="article-flag" role="img" aria-label="已加入書籤">★</span>}
+        {note && <span className="article-flag" role="img" aria-label="有筆記">✎</span>}
+      </b>
       {paragraphs.map((p, i) => (
         <p key={i}>
           <Highlight text={p.line} hits={p.hits} />
@@ -102,4 +119,4 @@ function ArticleBlock({
       />
     </article>
   );
-}
+});

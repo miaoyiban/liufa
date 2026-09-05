@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   openLawDb, articleKey, addHistory, listHistory,
   toggleBookmark, listBookmarks, getNote, putNote, listNotes,
@@ -54,10 +54,13 @@ describe('bookmarks', () => {
   });
 
   it('最新加入的在前', async () => {
+    // 用明確的時間戳排序,不靠真實 sleep 拉開毫秒差(那樣會 flaky,而這條
+    // 測試在 CI 上是部署的關卡)。
+    const now = vi.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000);
     await toggleBookmark(db, 'B0000001', '184');
-    await new Promise((r) => setTimeout(r, 2));
     await toggleBookmark(db, 'C0000001', '271');
     expect((await listBookmarks(db)).map((b) => b.no)).toEqual(['271', '184']);
+    now.mockRestore();
   });
 });
 

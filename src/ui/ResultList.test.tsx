@@ -63,3 +63,48 @@ describe('ResultList', () => {
     expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
   });
 });
+
+describe('ResultList 渲染視窗', () => {
+  const bulk = (pcode: string, abbr: string, n: number, from = 1): ResultGroup => ({
+    pcode, abbr,
+    results: Array.from({ length: n }, (_, i) => ({
+      pcode, abbr, article: article(String(from + i), '過失'), hits: [],
+    })),
+  });
+
+  it('命中數龐大時只渲染一個視窗,但分組計數仍是完整值', () => {
+    const big = [bulk('B0000001', '民法', 3000)];
+    const { container } = render(<ResultList groups={big} selected={0} onSelect={() => {}} />);
+
+    const options = container.querySelectorAll('[role="option"]');
+    expect(options.length).toBeGreaterThan(0);
+    expect(options.length).toBeLessThan(200);
+    // 沒有被截斷,只是沒有一次全部渲染:計數與「尚有幾條」都說得出完整數字
+    expect(container.querySelector('.group-count')?.textContent).toBe('3000');
+    expect(container.querySelector('.results-more')?.textContent)
+      .toContain(String(3000 - options.length));
+  });
+
+  it('選取落在視窗之外時,視窗延伸到選取項目(方向鍵不會走進未渲染區)', () => {
+    const big = [bulk('B0000001', '民法', 3000)];
+    const { container } = render(<ResultList groups={big} selected={2999} onSelect={() => {}} />);
+    expect(container.querySelector('[aria-selected="true"]')?.textContent)
+      .toContain('第 3000 條');
+  });
+
+  it('視窗跨分組時,後面的分組照樣渲染,索引仍然連續', () => {
+    const many = [bulk('B0000001', '民法', 60), bulk('C0000001', '刑法', 60, 1000)];
+    const onSelect = vi.fn();
+    const { container } = render(<ResultList groups={many} selected={0} onSelect={onSelect} />);
+    const options = container.querySelectorAll('[role="option"]');
+    expect(options.length).toBeLessThan(120);
+    // 第二組有被渲染到,且第一個項目的攤平索引接在第一組之後
+    expect(container.querySelectorAll('.group-title')).toHaveLength(2);
+    expect(screen.getByText('第 1000 條')).toBeDefined();
+  });
+
+  it('全部命中都在視窗內時不顯示「尚有幾條」', () => {
+    const { container } = render(<ResultList groups={groups} selected={0} onSelect={() => {}} />);
+    expect(container.querySelector('.results-more')).toBeNull();
+  });
+});

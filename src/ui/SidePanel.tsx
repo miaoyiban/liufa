@@ -18,6 +18,9 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [message, setMessage] = useState('');
+  // 讀取失敗與「真的沒有資料」必須分開:兩者都留下空清單,但只有後者可以說
+  // 「還沒有書籤或查詢紀錄」。把錯誤講成空狀態,等於對使用者謊報他的資料。
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const reload = useCallback(async () => {
     if (!db) return;
@@ -25,8 +28,10 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
       const [b, h] = await Promise.all([listBookmarks(db), listHistory(db, 20)]);
       setBookmarks(b);
       setHistory(h);
+      setLoadFailed(false);
     } catch (err) {
       console.error('讀取書籤或最近查詢失敗', err);
+      setLoadFailed(true);
     }
   }, [db]);
 
@@ -61,6 +66,17 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
       setMessage(`匯入失敗:${(e as Error).message}`);
     }
   };
+
+  if (loadFailed) {
+    return (
+      <div className="side">
+        <div className="status status-error">
+          讀取本機資料失敗,書籤與最近查詢暫時無法顯示(資料並未遺失)。
+        </div>
+        <Transfer onExport={onExport} onImport={onImport} message={message} />
+      </div>
+    );
+  }
 
   if (bookmarks.length === 0 && history.length === 0) {
     return (

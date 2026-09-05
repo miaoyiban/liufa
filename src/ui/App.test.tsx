@@ -28,14 +28,19 @@ const corpus: Corpus = {
   ],
 };
 
-async function renderReady() {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => corpus })));
+async function renderReady(c: Corpus = corpus) {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => c })));
   render(<App />);
   return screen.findByLabelText('搜尋法條');
 }
 
 function targetArticleId(): string | undefined {
   return document.querySelector('.article-target')?.id;
+}
+
+/** 右欄目前顯示的是哪一部法規 */
+function readerLaw(): string | null | undefined {
+  return document.querySelector('.reader-head h1')?.textContent;
 }
 
 describe('Workspace 單向同步(左欄選取 → 右欄跳轉)', () => {
@@ -70,6 +75,179 @@ describe('Workspace 單向同步(左欄選取 → 右欄跳轉)', () => {
     expect(targetArticleId()).toBe('article-185');
     const selectedOption = screen.getByRole('option', { name: /第 185 條/ });
     expect(selectedOption.getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+// 六法核心中有四部都有第 184 條——冷啟動輸入「184」時,這四部都是合法候選。
+const coreCorpus: Corpus = {
+  sourceUpdatedAt: '2026/8/21',
+  builtAt: '2026-09-03T00:00:00.000Z',
+  laws: [
+    coreLaw('B0000001', '民法', '民法及關係法規'),
+    coreLaw('B0010001', '民事訴訟法', '民事訴訟法及關係法規'),
+    coreLaw('C0000001', '刑法', '刑法及關係法規'),
+    coreLaw('C0010001', '刑事訴訟法', '刑事訴訟法及關係法規'),
+  ],
+};
+
+function coreLaw(pcode: string, abbr: string, group: string): Corpus['laws'][number] {
+  return {
+    pcode, name: abbr, abbr, aliases: [], group,
+    updated: '20260817', history: '1.制定',
+    blocks: [
+      { t: 'a', no: '184', main: 184, sub: 0, label: '第 184 條', text: `${abbr}第一八四條內容。` },
+      { t: 'a', no: '185', main: 185, sub: 0, label: '第 185 條', text: `${abbr}第一八五條內容。` },
+    ],
+  };
+}
+
+describe('§5.5 情境二:冷啟動輸入純數字條號', () => {
+  it('候選清單完整呈現,且方向鍵能走完全部候選', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+
+    // 四部核心法規都有第 184 條,四個都必須留在清單上
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    expect(document.querySelector('.summary')?.textContent)
+      .toBe('共 4 條命中,分布於 4 部法規');
+    expect([...document.querySelectorAll('.group-title')].map((e) => e.firstChild?.textContent))
+      .toEqual(['民法', '民事訴訟法', '刑法', '刑事訴訟法']);
+
+    // 方向鍵要能一路走到最後一個候選,右欄跟著換法規
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+    for (const expected of ['民事訴訟法', '刑法', '刑事訴訟法']) {
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      await waitFor(() => expect(readerLaw()).toBe(expected));
+    }
+    expect(targetArticleId()).toBe('article-184');
+    // 走完之後候選清單仍然完整,不會因為右欄換了法規就塌成一個
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+  });
+
+  it('先開啟一部法規後再查純數字,沿用開始打字時正在讀的法規(§5.5 情境一)', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    // 先用法規名開啟刑法
+    await user.type(input, '刑法');
+    await waitFor(() => expect(readerLaw()).toBe('刑法'));
+
+    await user.clear(input);
+    await user.type(input, '185');
+
+    await waitFor(() => expect(targetArticleId()).toBe('article-185'));
+    expect(readerLaw()).toBe('刑法');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+});
+
+// 單一法規 150 條全部命中同一個關鍵字,用來檢查「左欄只渲染視窗、但計數與
+// 鍵盤導覽仍涵蓋完整清單」。
+const bulkCorpus: Corpus = {
+  sourceUpdatedAt: '2026/8/21',
+  builtAt: '2026-09-03T00:00:00.000Z',
+  laws: [
+    {
+      pcode: 'B0000001', name: '民法', abbr: '民法', aliases: ['民'],
+      group: '民法及關係法規', updated: '20260817', history: '1.制定',
+      blocks: Array.from({ length: 150 }, (_, i) => ({
+        t: 'a' as const, no: String(i + 1), main: i + 1, sub: 0,
+        label: `第 ${i + 1} 條`, text: '因過失致生損害。',
+      })),
+    },
+  ],
+};
+
+describe('Cmd+D 書籤', () => {
+  it('加入與移除都會回報結果,並在條號旁顯示標記', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady();
+
+    await user.type(input, '過失');
+    await waitFor(() => expect(targetArticleId()).toBe('article-184'));
+
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+    expect(await screen.findByText('已加入書籤:民法 184')).toBeDefined();
+    await waitFor(() =>
+      expect(document.querySelector('#article-184 [aria-label="已加入書籤"]')).not.toBeNull()
+    );
+
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+    expect(await screen.findByText('已移除書籤:民法 184')).toBeDefined();
+    await waitFor(() =>
+      expect(document.querySelector('#article-184 [aria-label="已加入書籤"]')).toBeNull()
+    );
+  });
+
+  it('尚未開啟條文時說明按了為什麼沒有反應', async () => {
+    await renderReady();
+    // 本機資料庫是非同步開啟的,在它就緒之前按 Cmd+D 會得到另一句(同樣誠實的)
+    // 訊息:「書籤功能暫時無法使用」。這裡要驗的是「有條文可加書籤」以外的
+    // 那個原因,所以重試到資料庫就緒為止;重複按沒有副作用。
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'd', metaKey: true });
+      expect(screen.getByText(/尚未開啟任何條文/)).toBeDefined();
+    });
+  });
+
+  it('本機資料庫不可用時說明原因,不會按了完全沒反應', async () => {
+    // 私密瀏覽、儲存空間被封鎖等情況:openLawDb 失敗,db 永遠是 null。
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('indexedDB', {
+      open: () => { throw new DOMException('封鎖中', 'SecurityError'); },
+    });
+    await renderReady();
+
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+
+    expect(await screen.findByText(/書籤功能暫時無法使用/)).toBeDefined();
+    logged.mockRestore();
+  });
+});
+
+describe('Enter 進入閱讀之後的打字去處(§7.2)', () => {
+  it('在右欄打可列印字元時焦點回到搜尋框,輸入不會被吞掉', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady();
+
+    await user.type(input, '過失');
+    await waitFor(() => expect(targetArticleId()).toBe('article-184'));
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const paneRight = document.querySelector('.pane-right') as HTMLElement;
+    expect(document.activeElement).toBe(paneRight);
+
+    // 焦點在不可編輯的右欄時打字,原本會直接消失
+    fireEvent.keyDown(paneRight, { key: '刑', bubbles: true });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+
+    // 焦點回到搜尋框後,接下來的輸入照常進入查詢
+    await user.type(input, '184');
+    expect((input as HTMLInputElement).value).toBe('過失184');
+  });
+});
+
+describe('大量命中時的左欄渲染', () => {
+  it('只渲染視窗,但命中數與方向鍵可達範圍仍是完整清單', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(bulkCorpus);
+
+    await user.type(input, '過失');
+    await waitFor(() =>
+      expect(document.querySelector('.summary')?.textContent)
+        .toBe('共 150 條命中,分布於 1 部法規')
+    );
+
+    // 渲染端有視窗:不會一次把 150 條全部塞進 DOM
+    expect(screen.getAllByRole('option').length).toBeLessThan(150);
+
+    // 但鍵盤導覽仍走得到最後一條——視窗會跟著選取延伸
+    for (let i = 0; i < 149; i++) fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => expect(targetArticleId()).toBe('article-150'));
+    expect(document.querySelector('.summary')?.textContent)
+      .toBe('共 150 條命中,分布於 1 部法規');
   });
 });
 

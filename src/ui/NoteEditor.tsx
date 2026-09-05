@@ -106,7 +106,10 @@ export function NoteEditor({ pcode, no, lawUpdated, note, db, onSaved }: Props) 
   };
 
   const warning = staleNoteWarning(note, lawUpdated);
-  const html = useMemo(() => renderMarkdown(body), [body]);
+  // 空內容不進 marked/DOMPurify。這個 memo 在提早 return 之上,整部民法
+  // 1,439 條就有 1,439 個 NoteEditor 掛載,其中絕大多數只渲染一顆「+ 新增
+  // 筆記」按鈕——為它們解析空字串,產出還會被丟掉。
+  const html = useMemo(() => (body ? renderMarkdown(body) : ''), [body]);
 
   // db 為 null 代表筆記功能目前不可用,不論是還在開啟中還是被瀏覽器拒絕
   // (私密瀏覽、儲存空間被封鎖等)——不能讓使用者以為打字會存到。跟

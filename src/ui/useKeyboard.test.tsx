@@ -7,7 +7,7 @@ function setup(over: Partial<Parameters<typeof useKeyboard>[0]> = {}) {
   const opts = {
     count: 3, selected: 1,
     onMove: vi.fn(), onEnter: vi.fn(), onEscape: vi.fn(),
-    onDivision: vi.fn(), onBookmark: vi.fn(),
+    onDivision: vi.fn(), onBookmark: vi.fn(), onPrintable: vi.fn(),
     ...over,
   };
   renderHook(() => useKeyboard(opts));
@@ -109,6 +109,52 @@ describe('useKeyboard', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true }));
     expect(o.onDivision).not.toHaveBeenCalled();
     input.remove();
+  });
+
+  it('焦點不在輸入框時打可列印字元,交還給搜尋框', () => {
+    const o = setup();
+    const div = document.createElement('div');
+    div.tabIndex = -1;
+    document.body.appendChild(div);
+    div.dispatchEvent(new KeyboardEvent('keydown', { key: '刑', bubbles: true }));
+    expect(o.onPrintable).toHaveBeenCalledTimes(1);
+    div.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(o.onPrintable).toHaveBeenCalledTimes(2);
+    div.remove();
+  });
+
+  it('功能鍵、修飾鍵組合與導航鍵不算可列印字元', () => {
+    const o = setup();
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    for (const init of [
+      { key: 'Tab' }, { key: 'F1' }, { key: 'Home' }, { key: 'ArrowDown' },
+      { key: 'Enter' }, { key: 'Escape' }, { key: 'a', metaKey: true },
+      { key: 'a', ctrlKey: true }, { key: 'a', altKey: true },
+      { key: 'a', isComposing: true },
+    ]) {
+      div.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init }));
+    }
+    expect(o.onPrintable).not.toHaveBeenCalled();
+    div.remove();
+  });
+
+  it('焦點已在搜尋框時不重複搶焦點', () => {
+    const o = setup();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(o.onPrintable).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('筆記編輯中(textarea)打字不搶焦點', () => {
+    const o = setup();
+    const ta = document.createElement('textarea');
+    document.body.appendChild(ta);
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(o.onPrintable).not.toHaveBeenCalled();
+    ta.remove();
   });
 
   it('連續按兩次 ↓ 而中間沒有重新 render,兩次都以目前的 selected 計算', () => {

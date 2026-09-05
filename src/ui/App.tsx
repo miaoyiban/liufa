@@ -7,7 +7,7 @@ import { ResultList, flatResults } from './ResultList';
 import { ReaderPane } from './ReaderPane';
 import { SidePanel } from './SidePanel';
 import { useKeyboard } from './useKeyboard';
-import { useLawDb, useNotes } from './useLawDb';
+import { useBookmarks, useLawDb, useNotes } from './useLawDb';
 import { addHistory, toggleBookmark } from '../store/db';
 import { UpdateBanner, DataVersion } from './UpdateBanner';
 import type { Law } from '../core/types';
@@ -53,18 +53,35 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   // 書籤變動後用來強制 SidePanel 重新掛載、重新讀取清單(見下方 onBookmark)。
   const [dbVersion, setDbVersion] = useState(0);
   const [updateReady, setUpdateReady] = useState(false);
+  // Cmd+D 的結果回報。書籤是個開關,不說一聲的話使用者無從得知自己剛剛是
+  // 加入還是移除,db/reader 不存在時更是按了完全沒有反應。
+  const [notice, setNotice] = useState('');
   const db = useLawDb();
   const { notes, reload: reloadNotes } = useNotes(db);
+  const { bookmarks, reload: reloadBookmarks } = useBookmarks(db);
 
   useEffect(() => {
     notifyUpdate = setUpdateReady;
     return () => { notifyUpdate = null; };
   }, []);
 
+  // 閱讀脈絡的法規只在查詢字串變動的那一刻快照一次,不即時跟著 reader 走。
+  // 即時讀 reader 會構成單向塌縮:outcome 讀 reader → 下方的 effect 又從
+  // outcome 寫 reader,於是「未開啟法規時列出六法候選」(§5.5 情境二)在第一次
+  // 重新算 outcome 時就被自己的第一筆結果改判成「已開啟法規」,候選清單塌成
+  // 一組,方向鍵再也走不到其餘候選,摘要還會宣告錯誤的命中數。
+  // 快照後的語意才是 §5.5 情境一 原本要的:「使用者開始打這個查詢時正在讀的法規」。
+  const [ctxPcode, setCtxPcode] = useState<string | null>(null);
+  useEffect(() => {
+    setCtxPcode(reader?.pcode ?? null);
+    // 只在 query 變動時取樣;把 reader 放進 deps 就等於恢復上述的塌縮。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
   const index = useMemo(() => new AliasIndex(corpus.laws), [corpus]);
   const outcome = useMemo(
-    () => search(corpus, parseQuery(query, index), { currentPcode: reader?.pcode ?? null }),
-    [corpus, query, index, reader?.pcode]
+    () => search(corpus, parseQuery(query, index), { currentPcode: ctxPcode }),
+    [corpus, query, index, ctxPcode]
   );
 
   const flat = useMemo(() => flatResults(outcome.groups), [outcome]);
@@ -129,11 +146,27 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
       inputRef.current?.focus();
     },
     onDivision: jumpDivision,
+    onPrintable: () => inputRef.current?.focus(),
     onBookmark: () => {
-      if (!db || !reader) return;
+      if (!db) {
+        setNotice('書籤功能暫時無法使用(尚未連上本機資料庫)');
+        return;
+      }
+      if (!reader) {
+        setNotice('尚未開啟任何條文,無法加入書籤');
+        return;
+      }
+      const where = `${law?.abbr ?? reader.pcode} ${reader.no}`;
       toggleBookmark(db, reader.pcode, reader.no)
-        .then(() => setDbVersion((v) => v + 1))
-        .catch((err) => console.error('切換書籤失敗', err));
+        .then((added) => {
+          setNotice(added ? `已加入書籤:${where}` : `已移除書籤:${where}`);
+          reloadBookmarks();
+          setDbVersion((v) => v + 1);
+        })
+        .catch((err) => {
+          console.error('切換書籤失敗', err);
+          setNotice('書籤儲存失敗,請稍後再試');
+        });
     },
   });
 
@@ -150,6 +183,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           placeholder="民184 / 過失 / 民法 損害賠償"
           aria-label="搜尋法條"
         />
+        {notice && <div className="notice" role="status">{notice}</div>}
         <div className="result-scroll">
           {query === '' ? (
             <SidePanel key={dbVersion} db={db} corpus={corpus} onOpen={setReader} />
@@ -177,6 +211,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           targetNo={reader?.no ?? null}
           hitsByNo={hitsByNo}
           notes={notes}
+          bookmarks={bookmarks}
           db={db}
           onNoteSaved={reloadNotes}
         />

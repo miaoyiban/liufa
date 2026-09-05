@@ -41,6 +41,11 @@ body {
 
 .result-scroll { flex: 1; overflow-y: auto; }
 
+.notice {
+  padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--muted);
+  border-bottom: 1px solid var(--line); background: #fafafa;
+}
+
 .status { padding: 2rem; color: var(--muted); }
 .status-error { color: #c00; }
 
@@ -73,6 +78,7 @@ mark { background: var(--mark); color: inherit; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.results-more { padding: 0.6rem 1rem; font-size: 0.8rem; color: var(--muted); }
 .summary { padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--muted); }
 .diagnosis { padding: 0.75rem 1rem; font-size: 0.85rem; color: #a05a00; background: #fff8e6; }
 
@@ -94,6 +100,7 @@ mark { background: var(--mark); color: inherit; }
 
 .article { margin: 0 0 1.5rem; scroll-margin-top: 3rem; }
 .article-no { display: block; color: var(--accent); font-size: 0.9rem; }
+.article-flag { margin-left: 0.4rem; color: #c08a00; font-size: 0.85rem; }
 .article p { margin: 0.25rem 0; }
 .article-target { background: #fffdf2; }
 
