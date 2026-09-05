@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCorpus } from './useCorpus';
 import { AliasIndex } from '../core/alias';
 import { parseQuery } from '../core/parseQuery';
 import { search } from '../core/search';
 import { ResultList, flatResults } from './ResultList';
 import { ReaderPane } from './ReaderPane';
+import { useKeyboard } from './useKeyboard';
 import type { Law } from '../core/types';
 import type { Hit } from '../core/search';
 import './app.css';
@@ -58,10 +59,50 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     return m;
   }, [outcome, reader]);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const readerRef = useRef<HTMLDivElement>(null);
+
+  // 單向同步:選取變動 → 右欄跟隨。右欄自行捲動時「不」回頭改變選取,
+  // 否則往下讀兩頁鄰近條文,左欄選取會一路跳動。
+  useEffect(() => {
+    const r = flat[selected];
+    if (r) setReader({ pcode: r.pcode, no: r.article.no });
+  }, [flat, selected]);
+
+  // 條號查詢的直接跳轉
+  useEffect(() => {
+    if (outcome.jumpTo) setReader(outcome.jumpTo);
+  }, [outcome.jumpTo?.pcode, outcome.jumpTo?.no]);
+
+  const jumpDivision = (dir: -1 | 1) => {
+    const divisions = readerRef.current?.querySelectorAll('.division');
+    if (!divisions?.length) return;
+    const top = readerRef.current!.scrollTop;
+    const list = [...divisions] as HTMLElement[];
+    const next = dir === 1
+      ? list.find((d) => d.offsetTop > top + 4)
+      : [...list].reverse().find((d) => d.offsetTop < top - 4);
+    next?.scrollIntoView({ block: 'start' });
+  };
+
+  useKeyboard({
+    count: flat.length,
+    selected,
+    onMove: setSelected,
+    onEnter: () => readerRef.current?.focus(),
+    onEscape: () => {
+      if (query) setQuery('');
+      inputRef.current?.focus();
+    },
+    onDivision: jumpDivision,
+    onBookmark: () => { /* Task 16 接上書籤 */ },
+  });
+
   return (
     <div className="app">
       <div className="pane-left">
         <input
+          ref={inputRef}
           className="search-input"
           autoFocus
           value={query}
@@ -83,7 +124,7 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           <ResultList groups={outcome.groups} selected={selected} onSelect={setSelected} />
         </div>
       </div>
-      <div className="pane-right">
+      <div className="pane-right" ref={readerRef} tabIndex={-1}>
         <ReaderPane law={law} targetNo={reader?.no ?? null} hitsByNo={hitsByNo} />
       </div>
     </div>
