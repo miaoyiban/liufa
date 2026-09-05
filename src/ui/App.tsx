@@ -178,10 +178,15 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     onMove: selectAndFollow,
     onEnter: () => {
       readerRef.current?.focus();
+      // Enter 是使用者明確動作(§5.5 情境一「即將到來的點目錄」同一類):
+      // 把目前顯示中的 displayTarget(可能只是候選不只一部時的預覽)提升為
+      // reader,而不是只有已經被自動確認或使用者選取過的才算數——否則畫面上
+      // 明明顯示著某條文,Enter/Cmd+D 卻表現得像什麼都沒開啟。
+      if (displayTarget) setReader(displayTarget);
       // 有實際查詢字串且已定位到條文時才留下歷史紀錄,避免空查詢或
       // 尚未跳轉時寫入沒有意義的紀錄。
-      if (db && reader && query) {
-        addHistory(db, { ts: Date.now(), query, pcode: reader.pcode, no: reader.no })
+      if (db && displayTarget && query) {
+        addHistory(db, { ts: Date.now(), query, pcode: displayTarget.pcode, no: displayTarget.no })
           .catch((err) => console.error('寫入最近查詢失敗', err));
       }
     },
@@ -196,12 +201,14 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
         setNotice('書籤功能暫時無法使用(尚未連上本機資料庫)');
         return;
       }
-      if (!reader) {
+      // Cmd+D 對「目前顯示中」的條文生效——即使候選不只一部、使用者還沒按
+      // 方向鍵,右欄顯示的仍是 displayTarget(預覽),不是只認已確認的 reader。
+      if (!displayTarget) {
         setNotice('尚未開啟任何條文,無法加入書籤');
         return;
       }
-      const where = `${law?.abbr ?? reader.pcode} ${reader.no}`;
-      toggleBookmark(db, reader.pcode, reader.no)
+      const where = `${law?.abbr ?? displayTarget.pcode} ${displayTarget.no}`;
+      toggleBookmark(db, displayTarget.pcode, displayTarget.no)
         .then((added) => {
           setNotice(added ? `已加入書籤:${where}` : `已移除書籤:${where}`);
           reloadBookmarks();

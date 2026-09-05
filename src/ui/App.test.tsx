@@ -172,6 +172,107 @@ describe('§5.5 情境二:冷啟動輸入純數字條號', () => {
   });
 });
 
+// C1 附帶行為(不在 brief 三條硬性驗收條件之列,但既有的 totalLaws === 1
+// 自動確認需要自己的測試):民法、刑法都有第 18 條(冷啟動打出 2 個候選);
+// 只有民法有第 185 條——單純繼續打字就會自然收斂到唯一一部,不靠使用者按
+// 方向鍵。民法、民事訴訟法都有第 9 條,用來驗證收斂後的法規有沒有真的成為
+// 下一次查詢的脈絡(如果沒有,打「9」會看到 2 個候選,不是 1 個)。
+const narrowingCorpus: Corpus = {
+  sourceUpdatedAt: '2026/8/21',
+  builtAt: '2026-09-03T00:00:00.000Z',
+  laws: [
+    {
+      pcode: 'B0000001', name: '民法', abbr: '民法', aliases: [], group: '民法及關係法規',
+      updated: '20260817', history: '1.制定',
+      blocks: [
+        { t: 'a', no: '18', main: 18, sub: 0, label: '第 18 條', text: '民法第十八條內容。' },
+        { t: 'a', no: '185', main: 185, sub: 0, label: '第 185 條', text: '民法第一八五條內容。' },
+        { t: 'a', no: '9', main: 9, sub: 0, label: '第 9 條', text: '民法第九條內容。' },
+      ],
+    },
+    {
+      pcode: 'C0000001', name: '刑法', abbr: '刑法', aliases: [], group: '刑法及關係法規',
+      updated: '20260817', history: '1.制定',
+      blocks: [
+        { t: 'a', no: '18', main: 18, sub: 0, label: '第 18 條', text: '刑法第十八條內容。' },
+      ],
+    },
+    {
+      pcode: 'B0010001', name: '民事訴訟法', abbr: '民事訴訟法', aliases: [], group: '民事訴訟法及關係法規',
+      updated: '20260817', history: '1.制定',
+      blocks: [
+        { t: 'a', no: '9', main: 9, sub: 0, label: '第 9 條', text: '民事訴訟法第九條內容。' },
+      ],
+    },
+  ],
+};
+
+describe('唯一候選自動確認(totalLaws === 1 時的 reader 自動確認)', () => {
+  it('冷啟動打出多個候選,繼續打字自然收斂到唯一一部後,該法規成為後續查詢的脈絡', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(narrowingCorpus);
+
+    await user.type(input, '18');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2));
+
+    // 追加一個字元變成 "185",只有民法有,候選收斂到剩一部
+    await user.type(input, '5');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(1));
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    // 換一個全新的查詢:民法、民事訴訟法都有第 9 條。若剛才的收斂沒有真的
+    // 確認成 reader、成為脈絡,這裡會看到 2 個候選而不是 1 個。
+    await user.clear(input);
+    await user.type(input, '9');
+    await waitFor(() => expect(targetArticleId()).toBe('article-9'));
+    expect(readerLaw()).toBe('民法');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+});
+
+describe('候選不只一部、尚未按方向鍵時的 Enter / Cmd+D(fix round 2)', () => {
+  it('Enter 把目前顯示(預覽)的候選提升為 reader,並寫入最近查詢', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+    fireEvent.change(input, { target: { value: '184' } });
+
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    // 尚未按方向鍵,右欄仍是「預覽」第一筆候選(民法),不是使用者確認過的
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    // 清空查詢换回側欄,檢查「最近查詢」是否真的多了這一筆(對應顯示中的
+    // 民法,而不是靜默 no-op)
+    await user.clear(input);
+    await waitFor(() => {
+      const items = [...document.querySelectorAll('.item-text')].map((e) => e.textContent);
+      expect(items).toContain('民法 184');
+    });
+  });
+
+  it('Cmd+D 對目前顯示(預覽)的候選生效,不會誤判成「尚未開啟任何條文」', async () => {
+    const input = await renderReady(coreCorpus);
+    fireEvent.change(input, { target: { value: '184' } });
+
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+    expect(await screen.findByText('已加入書籤:民法 184')).toBeDefined();
+    await waitFor(() =>
+      expect(document.querySelector('#article-184 [aria-label="已加入書籤"]')).not.toBeNull()
+    );
+
+    // 復原:openLawDb() 用固定的預設資料庫名稱,同一個檔案內的所有測試共用
+    // 同一份 IndexedDB('law-lookup'),不會在測試之間重置。下面「Cmd+D 書籤」
+    // 描述區塊裡的既有測試用的也是「民法 184」這把鍵,這裡加了書籤不清掉,
+    // 會讓那個測試的第一次按 Cmd+D 變成「移除」而不是「加入」。
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+    await screen.findByText('已移除書籤:民法 184');
+  });
+});
+
 // 單一法規 150 條全部命中同一個關鍵字,用來檢查「左欄只渲染視窗、但計數與
 // 鍵盤導覽仍涵蓋完整清單」。
 const bulkCorpus: Corpus = {
