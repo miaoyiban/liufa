@@ -140,7 +140,7 @@ mark { background: var(--mark); color: inherit; }
 /* sticky 章節標題 = 紙本小六法的書眉:往下捲時永遠知道自己在第幾編第幾章 */
 .division {
   position: sticky;
-  top: 0;
+  top: -2rem;
   z-index: 1;
   background: var(--bg);
   padding: 0.6rem 0 0.4rem;
