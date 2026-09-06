@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   // GitHub Pages 部署在 /<repo>/ 之下;本機開發維持根路徑
-  base: process.env.GITHUB_ACTIONS ? '/law/' : '/',
+  base: process.env.GITHUB_ACTIONS ? '/liufa/' : '/',
   plugins: [
     react(),
     VitePWA({

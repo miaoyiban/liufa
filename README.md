@@ -43,8 +43,8 @@ npm test
 (此檔不進版控,必須在跑測試與 build 之前先產生,否則 `corpus.test.ts`
 的守門測試會直接失敗),再跑測試、`npm run build`,最後把 `dist/` 發布到 Pages。
 
-`vite.config.ts` 的 `base` 在 CI(`GITHUB_ACTIONS` 環境變數存在時)設為 `/law/`,
+`vite.config.ts` 的 `base` 在 CI(`GITHUB_ACTIONS` 環境變數存在時)設為 `/liufa/`,
 本機開發則維持 `/`。**部署前務必確認**:若這個 repository 在 GitHub 上的實際名稱
-不是 `law`(例如 fork 後改了名字),要先把這裡的 `base` 改成對應的
+不是 `liufa`(例如 fork 後改了名字),要先把這裡的 `base` 改成對應的
 `/<repo>/`,否則所有資產、manifest 與 Service Worker 的路徑都會指到錯誤的
 前綴,production 站台會整頁空白。
