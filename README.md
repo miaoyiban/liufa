@@ -38,13 +38,53 @@ npm test
 
 ## 部署
 
-`.github/workflows/deploy.yml` 會在推送到 `main`、手動觸發,或每月 1 日(對應資料來源的月更頻率)
-自動重建並部署到 GitHub Pages:安裝依賴、執行 `npm run data` 產生 `public/corpus.json`
-(此檔不進版控,必須在跑測試與 build 之前先產生,否則 `corpus.test.ts`
-的守門測試會直接失敗),再跑測試、`npm run build`,最後把 `dist/` 發布到 Pages。
+`.github/workflows/deploy.yml` 會在推送到 `main` 或手動觸發時部署到 GitHub Pages:
+安裝依賴、跑測試、`npm run build`,最後把 `dist/` 發布到 Pages。
+`public/corpus.json` 已納入版控,CI 預設**不會**重新下載法規資料,直接使用
+checkout 帶下來的版本(原因與更新流程見下一節)。
 
 `vite.config.ts` 的 `base` 在 CI(`GITHUB_ACTIONS` 環境變數存在時)設為 `/liufa/`,
 本機開發則維持 `/`。**部署前務必確認**:若這個 repository 在 GitHub 上的實際名稱
 不是 `liufa`(例如 fork 後改了名字),要先把這裡的 `base` 改成對應的
 `/<repo>/`,否則所有資產、manifest 與 Service Worker 的路徑都會指到錯誤的
 前綴,production 站台會整頁空白。
+
+## 更新法規資料
+
+`public/corpus.json` 是建置產物,但已提交進版控,**必須手動更新**:GitHub Actions
+的 runner 連不到法務部的資料來源主機,首次部署即以連線逾時失敗
+(`connect ETIMEDOUT 163.29.130.174:443`,是連不上,不是被拒絕),
+判斷是台灣政府網段對該類 runner IP 的封鎖,而非程式碼問題。
+
+更新步驟:
+
+```bash
+npm run data              # 重新下載並產生 public/corpus.json
+git status                # 確認 public/corpus.json 有變動
+git add public/corpus.json
+git commit -m "..."
+git push
+```
+
+## 恢復自動化
+
+若日後換到連得到 `sendlaw.moj.gov.tw` 的主機(例如自架 runner,或來源開放了
+GitHub-hosted runner 的 IP 段),可以重新打開 CI 自動重建:
+
+- **永久打開**:在 repo 的 Settings → Secrets and variables → Actions → Variables
+  新增 repo variable `REBUILD_CORPUS`,值設為 `true`。之後每次 push 到 `main`
+  都會先執行 `npm run data` 再建置。
+- **手動跑一次**:在 Actions 頁面手動觸發 `Deploy` workflow(`workflow_dispatch`),
+  勾選 `rebuild_corpus` 輸入。
+- **恢復每月自動重建**(對應來源的月更頻率):在 `deploy.yml` 的 `on:` 底下加回
+
+  ```yaml
+    schedule:
+      - cron: '0 2 1 * *'
+  ```
+
+  同時把 `REBUILD_CORPUS` 設為 `true`——否則排程觸發時 `npm run data` 一樣會被跳過。
+
+以上任一開關打開且下載成功時,**新語料只用於該次部署,不會被 commit 回 repo**,
+repo 內的 `public/corpus.json` 仍是舊版本,下次沒開開關的部署會用回舊的。
+若開關打開但下載失敗,建置會直接失敗(fail-fast),不會靜默退回已提交的版本。

@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    # 來源每月更新一次,每月 1 日重建以取得最新法規
-    - cron: '0 2 1 * *'
+    inputs:
+      rebuild_corpus:
+        description: '重新從法務部下載法規資料並重建 corpus.json(忽略已提交的版本;僅此次執行有效)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,7 +29,15 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      # 是否重新下載法規資料由兩個開關控制,任一成立即執行,預設關閉:
+      #   1. repo variable REBUILD_CORPUS 設為 'true'(未設定時 vars.* 為空字串,恆為 false)——換到連得到來源主機後的永久開關
+      #   2. workflow_dispatch 的 boolean 輸入 rebuild_corpus——手動跑一次看看用的開關
+      #      (用 inputs context 而非 github.event.inputs,前者的 boolean 輸入型別不會被字串化;
+      #       非 workflow_dispatch 觸發時 inputs.rebuild_corpus 為 null,視為 false,不會噴錯)
+      # 條件不成立時直接使用 checkout 帶下來的 public/corpus.json。
+      # 若條件成立但下載失敗,此步驟失敗即讓整個建置失敗,不會退回已提交的版本。
       - name: 建置法規資料
+        if: vars.REBUILD_CORPUS == 'true' || inputs.rebuild_corpus == true
         run: npm run data
       - run: npm test
       - run: npm run build
