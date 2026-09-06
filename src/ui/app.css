@@ -116,6 +116,18 @@ mark { background: var(--mark); color: inherit; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.item-orphan { cursor: default; }
+.item-orphan:hover { background: none; }
+.item-orphan-tag {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #a05a00;
+  background: #fff8e6;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+}
+.item-orphan-note { font-size: 0.78rem; color: #a05a00; margin-top: 0.2rem; }
 .results-more { padding: 0.6rem 1rem; font-size: 0.8rem; color: var(--muted); }
 .summary { padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--muted); }
 .diagnosis { padding: 0.75rem 1rem; font-size: 0.85rem; color: #a05a00; background: #fff8e6; }

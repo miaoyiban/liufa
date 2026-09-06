@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  listBookmarks, listHistory, type Bookmark, type HistoryEntry, type LawDb,
+  listBookmarks, listHistory, listNotes, type Bookmark, type HistoryEntry, type LawDb, type Note,
 } from '../store/db';
 import { exportAll, importAll } from '../store/transfer';
 import type { Corpus } from '../core/types';
@@ -17,6 +17,7 @@ type Props = {
 export function SidePanel({ db, corpus, onOpen }: Props) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [message, setMessage] = useState('');
   // 讀取失敗與「真的沒有資料」必須分開:兩者都留下空清單,但只有後者可以說
   // 「還沒有書籤或查詢紀錄」。把錯誤講成空狀態,等於對使用者謊報他的資料。
@@ -25,12 +26,14 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
   const reload = useCallback(async () => {
     if (!db) return;
     try {
-      const [b, h] = await Promise.all([listBookmarks(db), listHistory(db, 20)]);
+      const [b, h, nts] = await Promise.all([listBookmarks(db), listHistory(db, 20), listNotes(db)]);
       setBookmarks(b);
       setHistory(h);
+      // 新到舊:這份清單存在的意義就是「完整盤點」,最近動過的筆記排最前面最有用。
+      setNotes([...nts].sort((x, y) => y.updatedAt - x.updatedAt));
       setLoadFailed(false);
     } catch (err) {
-      console.error('讀取書籤或最近查詢失敗', err);
+      console.error('讀取書籤、筆記或最近查詢失敗', err);
       setLoadFailed(true);
     }
   }, [db]);
@@ -39,6 +42,10 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
 
   const abbr = (pcode: string) =>
     corpus.laws.find((l) => l.pcode === pcode)?.abbr ?? pcode;
+
+  // 孤兒筆記:所在法規已不在收錄清單中(語料整部移除、條號結構重編等)。
+  // 筆記資料本身沒有不見——只是原文暫時找不到——所以仍要列出來,但不能導覽過去。
+  const isOrphan = (pcode: string) => !corpus.laws.some((l) => l.pcode === pcode);
 
   const onExport = async () => {
     if (!db) return;
@@ -71,17 +78,17 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
     return (
       <div className="side">
         <div className="status status-error">
-          讀取本機資料失敗,書籤與最近查詢暫時無法顯示(資料並未遺失)。
+          讀取本機資料失敗,書籤、筆記與最近查詢暫時無法顯示(資料並未遺失)。
         </div>
         <Transfer onExport={onExport} onImport={onImport} message={message} />
       </div>
     );
   }
 
-  if (bookmarks.length === 0 && history.length === 0) {
+  if (bookmarks.length === 0 && history.length === 0 && notes.length === 0) {
     return (
       <div className="side">
-        <div className="status">還沒有書籤或查詢紀錄。輸入關鍵字或條號開始查詢。</div>
+        <div className="status">還沒有書籤、筆記或查詢紀錄。輸入關鍵字或條號開始查詢。</div>
         <Transfer onExport={onExport} onImport={onImport} message={message} />
       </div>
     );
@@ -111,6 +118,35 @@ export function SidePanel({ db, corpus, onOpen }: Props) {
                 <div className="item-text">{`${abbr(h.pcode)} ${h.no}`}</div>
               </li>
             ))}
+          </ul>
+        </section>
+      )}
+      {notes.length > 0 && (
+        <section>
+          <div className="group-title">筆記</div>
+          <ul className="group-items">
+            {notes.map((note) => {
+              const orphan = isOrphan(note.pcode);
+              const firstLine = note.body.split('\n')[0]?.trim() ?? '';
+              return (
+                <li
+                  key={note.key}
+                  className={orphan ? 'item item-orphan' : 'item'}
+                  onClick={orphan ? undefined : () => onOpen({ pcode: note.pcode, no: note.no })}
+                >
+                  <div className="item-no">
+                    {`${abbr(note.pcode)} ${note.no}`}
+                    {orphan && <span className="item-orphan-tag">不在收錄清單</span>}
+                  </div>
+                  <div className="item-text">{firstLine}</div>
+                  {orphan && (
+                    <div className="item-orphan-note">
+                      這部法規目前不在收錄清單中,暫時無法開啟原文,但筆記資料仍保留。
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
