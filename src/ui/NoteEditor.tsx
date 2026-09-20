@@ -1,8 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { putNote, type LawDb, type Note } from '../store/db';
 import { renderMarkdown, staleNoteWarning } from './markdown';
+import { applyMarkdownAction, diffRange, type MarkdownAction } from '../core/markdownEdit';
 
 const SAVE_DEBOUNCE_MS = 500;
+
+/** 工具列。字母型的用字元,圖形型的用 inline SVG(理由同 App.tsx 的漢堡鈕)。 */
+const TOOLS: { action: MarkdownAction; label: string; glyph: ReactNode }[] = [
+  { action: 'bold', label: '粗體', glyph: <b>B</b> },
+  { action: 'italic', label: '斜體', glyph: <i>I</i> },
+  { action: 'heading', label: '標題', glyph: 'H' },
+  { action: 'bullet', label: '項目清單', glyph: '\u2022' },
+  { action: 'ordered', label: '編號清單', glyph: '1.' },
+  { action: 'quote', label: '引用', glyph: '\u201c' },
+  {
+    action: 'link',
+    label: '連結',
+    glyph: (
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+        <path
+          d="M5.6 8.4a2.5 2.5 0 003.5 0l2-2a2.5 2.5 0 00-3.5-3.5l-1 1M8.4 5.6a2.5 2.5 0 00-3.5 0l-2 2a2.5 2.5 0 003.5 3.5l1-1"
+          fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+];
 
 type Props = {
   pcode: string;
@@ -25,6 +48,7 @@ export function NoteEditor({ pcode, no, lawUpdated, note, db, onSaved }: Props) 
   const [editing, setEditing] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const pendingRef = useRef<Pending | null>(null);
   const mountedRef = useRef(true);
@@ -105,6 +129,52 @@ export function NoteEditor({ pcode, no, lawUpdated, note, db, onSaved }: Props) 
     setEditing(false);
   };
 
+  /**
+   * 套用一個工具列動作。文字怎麼變是 core/markdownEdit 決定的,這裡只負責
+   * 把 textarea 的選取範圍餵進去、再把結果寫回去。
+   */
+  const applyAction = (action: MarkdownAction) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const before = { text: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd };
+    const after = applyMarkdownAction(action, before);
+
+    if (after.text !== before.text) {
+      const { start, endA, insert } = diffRange(before.text, after.text);
+      ta.setSelectionRange(start, endA);
+      // execCommand 已被標記為 deprecated,但它是唯一能把程式化修改寫進
+      // textarea 原生 undo stack 的方式。直接設 value 的話,使用者在工具列
+      // 按了幾下之後按 Cmd+Z,救回來的是按工具列「之前」的狀態,中間全沒了。
+      // 它會觸發真正的 input 事件,所以下面的 onChange(存檔那條路徑)會跟著跑。
+      let ok = false;
+      try {
+        ok = document.execCommand('insertText', false, insert);
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        // 退路:自己寫 value 並手動走一次 onChange,undo 會斷,但內容與存檔正確。
+        ta.value = after.text;
+        onChange(after.text);
+      }
+    }
+
+    // 選取要在最後設:文字長度變了,先設會被後來的寫入蓋掉。
+    ta.setSelectionRange(after.selStart, after.selEnd);
+    ta.focus();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 組字中的 Cmd+B 不是格式指令。全域的 useKeyboard 遇到 TEXTAREA 會整個
+    // 放行,所以這兩個組合鍵在這裡沒有競爭者。
+    if (e.nativeEvent.isComposing) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k !== 'b' && k !== 'i') return;
+    e.preventDefault();
+    applyAction(k === 'b' ? 'bold' : 'italic');
+  };
+
   const warning = staleNoteWarning(note, lawUpdated);
   // 空內容不進 marked/DOMPurify。這個 memo 在提早 return 之上,整部民法
   // 1,439 條就有 1,439 個 NoteEditor 掛載,其中絕大多數只渲染一顆「+ 新增
@@ -132,14 +202,44 @@ export function NoteEditor({ pcode, no, lawUpdated, note, db, onSaved }: Props) 
       {warning && <div className="note-warning">{warning}</div>}
       {saveError && <div className="note-error">儲存失敗,請重新輸入或稍後再試</div>}
       {editing ? (
-        <textarea
-          className="note-input"
-          autoFocus
-          value={body}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          placeholder="支援 Markdown"
-        />
+        <>
+          {/* 每一顆都要 preventDefault mousedown:否則按下去的瞬間 textarea
+              失焦 → onBlur → setEditing(false),編輯器在 click 生效之前就
+              收起來了,按鈕看起來完全沒作用。 */}
+          <div className="note-toolbar">
+            {TOOLS.map((t) => (
+              <button
+                key={t.action}
+                type="button"
+                className="note-tool"
+                aria-label={t.label}
+                title={t.label}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => applyAction(t.action)}
+              >
+                {t.glyph}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="note-tool note-tool-end"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onBlur}
+            >
+              預覽
+            </button>
+          </div>
+          <textarea
+            ref={taRef}
+            className="note-input"
+            autoFocus
+            value={body}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
+            placeholder="支援 Markdown"
+          />
+        </>
       ) : (
         <div
           className="note-preview"

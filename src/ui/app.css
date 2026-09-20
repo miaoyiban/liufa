@@ -253,6 +253,35 @@ mark { background: var(--mark); color: inherit; }
 .note { margin: 0.5rem 0 0; border-left: 3px solid #ffd85c; padding-left: 0.75rem; }
 .note-preview { font-size: 0.9rem; cursor: text; }
 .note-preview :first-child { margin-top: 0; }
+/* 工具列只在編輯中出現。常駐的話,整部法規每一則既有筆記上方都會多一排
+   按鈕,閱讀時全是雜訊——現有的「+ 新增筆記」也是 hover 才現身,同一個道理。 */
+.note-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+.note-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7rem;
+  height: 1.7rem;
+  padding: 0 0.35rem;
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.note-tool:hover { background: #f0f0f0; color: var(--fg); }
+.note-tool b, .note-tool i { font-size: 0.9rem; }
+/* 「預覽」推到最右邊:它是離開編輯,和左邊那排插入語法的按鈕不同類 */
+.note-tool-end { margin-left: auto; font-size: 0.8rem; }
+
 .note-input {
   width: 100%; min-height: 5rem; font: inherit; font-size: 0.9rem;
   border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem; resize: vertical;
