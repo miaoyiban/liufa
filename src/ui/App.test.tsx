@@ -691,3 +691,30 @@ describe('左欄收合', () => {
     expect(document.activeElement).toBe(document.querySelector('.pane-right'));
   });
 });
+
+describe('搜尋框清空鈕', () => {
+  const clearBtn = () => screen.queryByRole('button', { name: '清空搜尋' });
+
+  it('有字才出現,按下後清空查詢、結果收掉、焦點回到輸入框', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    // 空查詢時不該擺一顆按了沒事的鈕
+    expect(clearBtn()).toBeNull();
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    expect(clearBtn()).not.toBeNull();
+
+    await user.click(clearBtn()!);
+
+    expect((input as HTMLInputElement).value).toBe('');
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    // 清空後要能直接打下一個查詢,不必再去點輸入框(§7.2)
+    expect(document.activeElement).toBe(input);
+    expect(clearBtn()).toBeNull();
+
+    await user.keyboard('185');
+    expect((input as HTMLInputElement).value).toBe('185');
+  });
+});

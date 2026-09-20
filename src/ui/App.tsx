@@ -293,15 +293,36 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
               搜尋框,開啟即可打字」靠的就是它隨時可聚焦——把它藏進搜尋分頁,
               在目錄分頁打字就會再次靜默消失(那正是 §7.2 修掉的 bug)。
               反過來,在目錄分頁打字代表使用者要查詢,順手切回搜尋分頁。 */}
-          <input
-            ref={inputRef}
-            className="search-input"
-            autoFocus
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setTab('search'); }}
-            placeholder="民184 / 過失 / 民法 損害賠償"
-            aria-label="搜尋法條"
-          />
+          <div className="search-box">
+            <input
+              ref={inputRef}
+              className="search-input"
+              autoFocus
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setTab('search'); }}
+              placeholder="民184 / 過失 / 民法 損害賠償"
+              aria-label="搜尋法條"
+            />
+            {/* 只在有字可清時才出現:空查詢時擺一顆按了沒事的鈕,是在騙使用者
+                這裡有事可做。清空後焦點回到輸入框,接著就能直接打下一個查詢
+                ——跟 Escape 同一條路徑(§7.2)。 */}
+            {query !== '' && (
+              <button
+                type="button"
+                className="search-clear"
+                aria-label="清空搜尋"
+                title="清空搜尋"
+                onClick={() => { setQuery(''); focusSearch(); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+                  <path
+                    d="M3.5 3.5l7 7M10.5 3.5l-7 7"
+                    fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
           {notice && <div className="notice" role="status">{notice}</div>}
           <div className="tabs" role="tablist">
             <button
