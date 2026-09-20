@@ -20,7 +20,14 @@ body {
   background: var(--bg);
 }
 
-.app { display: grid; grid-template-columns: var(--pane) 1fr; height: 100dvh; }
+/* grid-template-columns 在現代瀏覽器可動畫,所以欄寬本身就補得了間,
+   不必用 transform 假裝位移、再想辦法讓右欄跟著變寬。 */
+.app {
+  display: grid;
+  grid-template-columns: var(--pane) 1fr;
+  height: 100dvh;
+  transition: grid-template-columns 0.18s ease;
+}
 .app-collapsed { grid-template-columns: var(--rail) 1fr; }
 
 .pane-left {
@@ -29,17 +36,41 @@ body {
   border-right: 1px solid var(--line);
   min-width: 0;
   min-height: 0;
+  /* 收合時把超出窄軌的內容裁掉。沒有這行的話,左欄內容會在 180ms 內
+     被擠過一連串越來越窄的寬度、整份清單逐格重排,比直接消失還難看。
+     裁切的前提是下面 .pane-body 保持原寬不跟著縮。 */
+  overflow: hidden;
 }
 
 /* 收合時用 hidden 把內容藏起來,而不是不渲染:目錄展開到第幾編、搜尋結果、
    捲動位置都留在原地(理由同「兩個分頁都保持掛載」)。但 [hidden] 是 UA
-   樣式,作者樣式的 display 一律贏過它——所以這裡必須用 :not([hidden]) 掛
-   display,否則收合後左欄內容照樣顯示。 */
-.pane-body:not([hidden]) {
+   樣式,作者樣式的 display 一律贏過它——所以收合狀態的 display: none 必須
+   由下面的 .pane-body[hidden] 明寫,否則收合後左欄內容照樣顯示。 */
+.pane-body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* 寬度釘在展開時的欄寬,不跟著格線縮 —— 收合過程中它只是被 .pane-left
+     裁掉,內部版面自始至終不重排。扣掉的 1px 是 .pane-left 的右框線:
+     box-sizing 是 border-box,不扣的話捲軸最右邊那 1px 會被裁掉。 */
+  min-width: calc(var(--pane) - 1px);
+  opacity: 1;
+  /* display 是二元的,補不了間。allow-discrete 讓它在收合時延到淡出結束
+     才變成 none(展開時則立刻生效),否則內容會在欄寬還在縮的時候瞬間
+     消失,看起來比完全沒有動畫更突兀。 */
+  transition:
+    opacity 0.14s ease,
+    display 0.14s allow-discrete;
+}
+.pane-body[hidden] {
+  display: none;
+  opacity: 0;
+}
+/* 展開時要有個可補間的起點:沒有這段的話,元素一被渲染就已經是 opacity: 1,
+   淡入無從發生(只有淡出會動,兩個方向不對稱)。 */
+@starting-style {
+  .pane-body { opacity: 0; }
 }
 
 .pane-toggle {
@@ -231,4 +262,13 @@ mark { background: var(--mark); color: inherit; }
 .data-version {
   padding: 0.5rem 1rem; border-top: 1px solid var(--line);
   font-size: 0.75rem; color: var(--muted);
+}
+
+/* 系統層級要求減少動態效果時,一律回到瞬間切換。收合是頻繁動作,對前庭
+   敏感的使用者來說,這種整片版面位移正是該關掉的那一類。 */
+@media (prefers-reduced-motion: reduce) {
+  .app,
+  .pane-body {
+    transition: none;
+  }
 }
