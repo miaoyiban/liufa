@@ -4,7 +4,9 @@ import { IDBFactory } from 'fake-indexeddb';
 import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { App, setUpdateAvailable, setUpdateHandler, divisionJumpTargets } from './App';
+import {
+  App, setUpdateAvailable, setUpdateHandler, divisionJumpTargets, nextDivisionStop,
+} from './App';
 import { openLawDb } from '../store/db';
 import type { Corpus } from '../core/types';
 
@@ -716,5 +718,36 @@ describe('搜尋框清空鈕', () => {
 
     await user.keyboard('185');
     expect((input as HTMLInputElement).value).toBe('185');
+  });
+});
+
+describe('nextDivisionStop(往前/往回找章節停靠點)', () => {
+  const tops = [0, 500, 1200, 3000];
+
+  it('往下找到下一個停靠點', () => {
+    expect(nextDivisionStop(tops, 0, 1)).toBe(500);
+    expect(nextDivisionStop(tops, 700, 1)).toBe(1200);
+  });
+
+  it('往回找到上一個停靠點', () => {
+    expect(nextDivisionStop(tops, 1500, -1)).toBe(1200);
+    expect(nextDivisionStop(tops, 3000, -1)).toBe(1200);
+  });
+
+  it('剛跳到某個停靠點時,往回走的是「上一個」而不是自己(容差)', () => {
+    // 正是使用者回報的症狀:按 ] 跳到 1200,再按 [ 若命中 1200 就原地不動
+    expect(nextDivisionStop(tops, 1200, -1)).toBe(500);
+    expect(nextDivisionStop(tops, 1200, 1)).toBe(3000);
+  });
+
+  it('捲動位置與停靠點差在容差內時,兩個方向都跳過它', () => {
+    expect(nextDivisionStop(tops, 1202, -1)).toBe(500);
+    expect(nextDivisionStop(tops, 1198, 1)).toBe(3000);
+  });
+
+  it('走到頭時回傳 undefined,不迴繞', () => {
+    expect(nextDivisionStop(tops, 3000, 1)).toBeUndefined();
+    expect(nextDivisionStop(tops, 0, -1)).toBeUndefined();
+    expect(nextDivisionStop([], 0, 1)).toBeUndefined();
   });
 });

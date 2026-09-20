@@ -32,6 +32,19 @@ export function divisionJumpTargets(levels: number[]): number[] {
   return targets;
 }
 
+/**
+ * 在遞增的章節位置清單裡,找出從 current 往 dir 方向的下一個停靠點。
+ * 容差 4px:剛跳過去時 current 恰好等於該停靠點,沒有容差的話往回找會
+ * 立刻命中自己、原地不動。
+ */
+export function nextDivisionStop(
+  tops: number[], current: number, dir: -1 | 1
+): number | undefined {
+  return dir === 1
+    ? tops.find((t) => t > current + 4)
+    : [...tops].reverse().find((t) => t < current - 4);
+}
+
 // Service Worker 偵測到新版時透過此訂閱點通知目前掛載的 Workspace。
 // 不自動靜默更新:只標記狀態,重新載入與否由使用者在 UpdateBanner 決定。
 let notifyUpdate: ((v: boolean) => void) | null = null;
@@ -178,19 +191,34 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   }, [outcome.jumpTo?.pcode, outcome.jumpTo?.no]);
 
   const jumpDivision = (dir: -1 | 1) => {
-    const divisions = readerRef.current?.querySelectorAll('.division');
-    if (!divisions?.length) return;
-    const top = readerRef.current!.scrollTop;
-    const list = [...divisions] as HTMLElement[];
-    const levels = list.map((d) => Number(d.dataset.level ?? '0'));
-    const targets = divisionJumpTargets(levels)
-      .map((i) => list[i])
-      .filter((d): d is HTMLElement => d !== undefined);
-    if (!targets.length) return;
-    const next = dir === 1
-      ? targets.find((d) => d.offsetTop > top + 4)
-      : [...targets].reverse().find((d) => d.offsetTop < top - 4);
-    next?.scrollIntoView({ block: 'start' });
+    const container = readerRef.current;
+    if (!container) return;
+    const list = [...container.querySelectorAll('.division')] as HTMLElement[];
+    if (!list.length) return;
+
+    // 量測前先關掉 sticky。所有 .division 都是 .reader 底下的同層兄弟,共用
+    // 同一個包含區塊,所以每一個捲過去的標題都還黏在 top: -2rem 沒有退場
+    // ——它們完全重疊,看起來才像只有一個。黏著時元素回報的是那個黏住的
+    // 位置,不是真正的版面位置:往回找時最先命中的會是「當前這一章自己的
+    // 標題」,按 [ 於是原地不動。加上再移除都在同一個 task 內,中間不會
+    // paint,不會閃爍;代價是一次強制重排,只發生在按鍵當下。
+    container.classList.add('reader-measuring');
+    const base = container.getBoundingClientRect().top - container.scrollTop;
+    const measured = list.map((d) => ({
+      top: d.getBoundingClientRect().top - base,
+      level: Number(d.dataset.level ?? '0'),
+    }));
+    container.classList.remove('reader-measuring');
+
+    const tops = divisionJumpTargets(measured.map((m) => m.level))
+      .map((i) => measured[i]?.top)
+      .filter((t): t is number => t !== undefined);
+    if (!tops.length) return;
+
+    const next = nextDivisionStop(tops, container.scrollTop, dir);
+    // 不用 scrollIntoView:它是依元素「現在」的矩形算捲動量,而往回跳的目標
+    // 正黏在頂端,算出來的位移只有 2rem(黏住的位移量),到不了目標。
+    if (next !== undefined) container.scrollTo({ top: next });
   };
 
   useKeyboard({

@@ -240,6 +240,10 @@ mark { background: var(--mark); color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 
+/* App.tsx 的 jumpDivision 量測真實版面位置時,暫時掛在 .pane-right 上。
+   黏著中的 sticky 元素回報的是黏住的位置而非版面位置,量不準。 */
+.reader-measuring .division { position: static; }
+
 .article { margin: 0 0 1.5rem; scroll-margin-top: 3rem; }
 .article-no { display: block; color: var(--accent); font-size: 0.9rem; }
 .article-flag { margin-left: 0.4rem; color: #c08a00; font-size: 0.85rem; }
