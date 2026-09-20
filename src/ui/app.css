@@ -7,6 +7,8 @@
   --sel: #e8f1fb;
   --mark: #fff1a8;
   --pane: 340px;
+  /* 收合後剩下的窄軌:整條都是展開按鈕,不必記得怎麼把左欄叫回來 */
+  --rail: 2.25rem;
 }
 
 * { box-sizing: border-box; }
@@ -19,6 +21,7 @@ body {
 }
 
 .app { display: grid; grid-template-columns: var(--pane) 1fr; height: 100dvh; }
+.app-collapsed { grid-template-columns: var(--rail) 1fr; }
 
 .pane-left {
   display: flex;
@@ -26,6 +29,38 @@ body {
   border-right: 1px solid var(--line);
   min-width: 0;
   min-height: 0;
+}
+
+/* 收合時用 hidden 把內容藏起來,而不是不渲染:目錄展開到第幾編、搜尋結果、
+   捲動位置都留在原地(理由同「兩個分頁都保持掛載」)。但 [hidden] 是 UA
+   樣式,作者樣式的 display 一律贏過它——所以這裡必須用 :not([hidden]) 掛
+   display,否則收合後左欄內容照樣顯示。 */
+.pane-body:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.pane-toggle {
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  text-align: right;
+}
+.pane-toggle:hover { background: #fafafa; color: var(--fg); }
+/* 收合後整條窄軌都是可按的目標,不是只有那個小箭頭 */
+.app-collapsed .pane-toggle {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem 0;
+  border-bottom: 0;
 }
 
 .pane-right { overflow-y: auto; padding: 2rem 2.5rem 60vh; }

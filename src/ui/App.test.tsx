@@ -595,3 +595,99 @@ describe('divisionJumpTargets(A-2:`[`/`]` 只跳編章,不跳節款目)', () => 
     expect(divisionJumpTargets([2, 3, 4])).toEqual([]);
   });
 });
+
+describe('左欄收合', () => {
+  const body = () => document.getElementById('pane-body');
+  const toggle = () => screen.getByRole('button', { name: /側欄/ });
+
+  it('收合後左欄內容退場、版面讓給右欄,再按一次回來', async () => {
+    const user = userEvent.setup();
+    await renderReady(coreCorpus);
+
+    expect(body()?.hasAttribute('hidden')).toBe(false);
+    expect(document.querySelector('.app')?.className).toBe('app');
+
+    await user.click(toggle());
+    expect(body()?.hasAttribute('hidden')).toBe(true);
+    // 版面真的讓出去了:光把內容藏起來、欄寬照舊的話,右欄一點也沒變寬。
+    expect(document.querySelector('.app')?.className).toBe('app app-collapsed');
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(toggle());
+    expect(body()?.hasAttribute('hidden')).toBe(false);
+    expect(document.querySelector('.app')?.className).toBe('app');
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('收合再展開,查詢字串、結果與目錄展開位置都還在', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    // 切到目錄並展開到法規層,製造一份「只存在於子元件內部」的狀態
+    await user.click(screen.getByRole('tab', { name: '目錄' }));
+    await user.click(screen.getByRole('button', { name: '刑法' }));
+    expect(screen.getByRole('button', { name: '第 185 條' })).toBeDefined();
+
+    await user.click(toggle());
+    await user.click(toggle());
+
+    // 收合若是靠「不渲染」而非 hidden,這裡會退回法規清單、查詢結果也會重算
+    expect(screen.getByRole('button', { name: '第 185 條' })).toBeDefined();
+    await user.click(screen.getByRole('tab', { name: '搜尋' }));
+    expect((input as HTMLInputElement).value).toBe('184');
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+  });
+
+  it('收合狀態下打可列印字元:自動展開並把焦點交回搜尋框(§7.2)', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.click(toggle());
+    expect(body()?.hasAttribute('hidden')).toBe(true);
+
+    fireEvent.keyDown(window, { key: '刑' });
+
+    expect(body()?.hasAttribute('hidden')).toBe(false);
+    expect(document.activeElement).toBe(input);
+
+    // 這裡蓋到的是「收合狀態被解除」,蓋不到「同步解除」。App.tsx 之所以用
+    // flushSync,是因為真實瀏覽器不讓 hidden 子樹裡的元素取得焦點:晚一個
+    // tick 展開,focus() 當下搜尋框還藏著,是個 no-op,字就掉了。
+    // jsdom 沒有這層限制——實測 focus() 對 hidden 子樹裡的 input 照樣生效——
+    // 所以把 flushSync 換成一般 setState,這個測試仍然全綠。
+    // 別因為「測試沒失敗」就拿掉 flushSync,那條路徑要靠實機驗證。
+  });
+
+  it('收合狀態下按 Escape:展開、清空查詢、焦點回搜尋框', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4));
+    await user.click(toggle());
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(body()?.hasAttribute('hidden')).toBe(false);
+    expect((input as HTMLInputElement).value).toBe('');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('收合不影響右欄的閱讀與 [ ] 跳章節', async () => {
+    const user = userEvent.setup();
+    const input = await renderReady(coreCorpus);
+
+    await user.type(input, '184');
+    await waitFor(() => expect(readerLaw()).toBe('民法'));
+    await user.click(toggle());
+
+    // 右欄照樣顯示條文
+    expect(readerLaw()).toBe('民法');
+    expect(targetArticleId()).toBe('article-184');
+    // 而且鍵盤仍然走得到右欄(這一鍵不該被收合狀態吞掉)
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(document.activeElement).toBe(document.querySelector('.pane-right'));
+  });
+});

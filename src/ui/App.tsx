@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useCorpus } from './useCorpus';
 import { AliasIndex } from '../core/alias';
 import { parseQuery } from '../core/parseQuery';
@@ -67,6 +68,9 @@ type Tab = 'search' | 'toc';
 function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<Tab>('search');
+  // 收合只是視野調整,不留存:重開一律是展開的,不會有人下次打開發現左欄不見
+  // 了,卻想不起來是自己上次收的。
+  const [collapsed, setCollapsed] = useState(false);
   const [reader, setReader] = useState<ReaderTarget>(null);
   const [selected, setSelected] = useState(0);
   // 書籤變動後用來強制 SidePanel 重新掛載、重新讀取清單(見下方 onBookmark)。
@@ -146,6 +150,18 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
 
+  // §7.2「焦點預設永遠在搜尋框,開啟即可打字」在收合狀態下會斷掉:搜尋框位在
+  // hidden 的子樹裡,focus() 對它完全無效,接著打的字靜默消失——正是 §7.2 當初
+  // 修掉的那個 bug。所以凡是要把焦點交回搜尋框的路徑,收合時都先展開。
+  //
+  // 用 flushSync 而不是交給 React 自己排程:useKeyboard 掛的是原生 window
+  // 監聽器且刻意不 preventDefault,靠的是「這個字元本身會落進剛聚焦的搜尋框」。
+  // 展開若慢一個 tick,focus() 執行時搜尋框還在 hidden 裡,第一個字照樣掉。
+  const focusSearch = () => {
+    if (collapsed) flushSync(() => setCollapsed(false));
+    inputRef.current?.focus();
+  };
+
   // 使用者主動選取(方向鍵移動或點擊清單項目)才讓右欄跟隨並成為之後查詢的
   // 脈絡——即使候選不只一部,這是使用者自己選的,不是系統拿第一筆亂猜。
   // 右欄自行捲動時「不」回頭改變選取,否則往下讀兩頁鄰近條文,左欄選取會
@@ -216,10 +232,10 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
     },
     onEscape: () => {
       if (query) setQuery('');
-      inputRef.current?.focus();
+      focusSearch();
     },
     onDivision: jumpDivision,
-    onPrintable: () => inputRef.current?.focus(),
+    onPrintable: focusSearch,
     onBookmark: () => {
       if (!db) {
         setNotice('書籤功能暫時無法使用(尚未連上本機資料庫)');
@@ -246,74 +262,91 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
   });
 
   return (
-    <div className="app">
+    <div className={collapsed ? 'app app-collapsed' : 'app'}>
       <div className="pane-left">
-        <UpdateBanner visible={updateReady} onReload={() => performUpdate?.()} />
-        {/* 搜尋框不屬於任何一個分頁,兩個分頁下都在。§7.2「焦點預設永遠在
-            搜尋框,開啟即可打字」靠的就是它隨時可聚焦——把它藏進搜尋分頁,
-            在目錄分頁打字就會再次靜默消失(那正是 §7.2 修掉的 bug)。
-            反過來,在目錄分頁打字代表使用者要查詢,順手切回搜尋分頁。 */}
-        <input
-          ref={inputRef}
-          className="search-input"
-          autoFocus
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setTab('search'); }}
-          placeholder="民184 / 過失 / 民法 損害賠償"
-          aria-label="搜尋法條"
-        />
-        {notice && <div className="notice" role="status">{notice}</div>}
-        <div className="tabs" role="tablist">
-          <button
-            type="button" role="tab" id="tab-search" aria-controls="panel-search"
-            aria-selected={tab === 'search'}
-            className={tab === 'search' ? 'tab tab-active' : 'tab'}
-            onClick={() => setTab('search')}
-          >
-            搜尋
-          </button>
-          <button
-            type="button" role="tab" id="tab-toc" aria-controls="panel-toc"
-            aria-selected={tab === 'toc'}
-            className={tab === 'toc' ? 'tab tab-active' : 'tab'}
-            onClick={() => setTab('toc')}
-          >
-            目錄
-          </button>
-        </div>
-        {/* 兩個分頁都保持掛載、用 hidden 切換顯示,各自的狀態才留得住:切到
-            目錄再切回搜尋,查詢與結果還在;切回目錄,展開到哪裡也還在。 */}
-        <div
-          className="result-scroll" role="tabpanel" id="panel-search"
-          aria-labelledby="tab-search" hidden={tab !== 'search'}
+        {/* 收合鈕本身留在 hidden 的容器外面,不然收起來就再也按不到了。
+            收合後它撐滿整條窄軌,成為一個很難按不中的展開目標。 */}
+        <button
+          type="button"
+          className="pane-toggle"
+          aria-expanded={!collapsed}
+          aria-controls="pane-body"
+          aria-label={collapsed ? '展開側欄' : '收合側欄'}
+          title={collapsed ? '展開側欄' : '收合側欄'}
+          onClick={() => setCollapsed((c) => !c)}
         >
-          {query === '' ? (
-            <SidePanel key={dbVersion} db={db} corpus={corpus} onOpen={setReader} />
-          ) : (
-            <>
-              {outcome.totalArticles > 0 && (
-                <div className="summary">
-                  共 {outcome.totalArticles} 條命中,分布於 {outcome.totalLaws} 部法規
-                </div>
-              )}
-              {outcome.diagnosis && (
-                <div className="diagnosis">
-                  「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
-                </div>
-              )}
-              <ResultList groups={outcome.groups} selected={selected} onSelect={selectAndFollow} />
-            </>
-          )}
+          <span aria-hidden="true">{collapsed ? '›' : '‹'}</span>
+        </button>
+        {/* 收合用 hidden 而不是不渲染:目錄展開到第幾編、搜尋結果、捲動位置
+            都留在原地(理由同下方「兩個分頁都保持掛載」)。 */}
+        <div className="pane-body" id="pane-body" hidden={collapsed}>
+          <UpdateBanner visible={updateReady} onReload={() => performUpdate?.()} />
+          {/* 搜尋框不屬於任何一個分頁,兩個分頁下都在。§7.2「焦點預設永遠在
+              搜尋框,開啟即可打字」靠的就是它隨時可聚焦——把它藏進搜尋分頁,
+              在目錄分頁打字就會再次靜默消失(那正是 §7.2 修掉的 bug)。
+              反過來,在目錄分頁打字代表使用者要查詢,順手切回搜尋分頁。 */}
+          <input
+            ref={inputRef}
+            className="search-input"
+            autoFocus
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setTab('search'); }}
+            placeholder="民184 / 過失 / 民法 損害賠償"
+            aria-label="搜尋法條"
+          />
+          {notice && <div className="notice" role="status">{notice}</div>}
+          <div className="tabs" role="tablist">
+            <button
+              type="button" role="tab" id="tab-search" aria-controls="panel-search"
+              aria-selected={tab === 'search'}
+              className={tab === 'search' ? 'tab tab-active' : 'tab'}
+              onClick={() => setTab('search')}
+            >
+              搜尋
+            </button>
+            <button
+              type="button" role="tab" id="tab-toc" aria-controls="panel-toc"
+              aria-selected={tab === 'toc'}
+              className={tab === 'toc' ? 'tab tab-active' : 'tab'}
+              onClick={() => setTab('toc')}
+            >
+              目錄
+            </button>
+          </div>
+          {/* 兩個分頁都保持掛載、用 hidden 切換顯示,各自的狀態才留得住:切到
+              目錄再切回搜尋,查詢與結果還在;切回目錄,展開到哪裡也還在。 */}
+          <div
+            className="result-scroll" role="tabpanel" id="panel-search"
+            aria-labelledby="tab-search" hidden={tab !== 'search'}
+          >
+            {query === '' ? (
+              <SidePanel key={dbVersion} db={db} corpus={corpus} onOpen={setReader} />
+            ) : (
+              <>
+                {outcome.totalArticles > 0 && (
+                  <div className="summary">
+                    共 {outcome.totalArticles} 條命中,分布於 {outcome.totalLaws} 部法規
+                  </div>
+                )}
+                {outcome.diagnosis && (
+                  <div className="diagnosis">
+                    「{outcome.diagnosis.term}」無命中,移除後有 {outcome.diagnosis.remaining} 條
+                  </div>
+                )}
+                <ResultList groups={outcome.groups} selected={selected} onSelect={selectAndFollow} />
+              </>
+            )}
+          </div>
+          <div
+            className="result-scroll" role="tabpanel" id="panel-toc"
+            aria-labelledby="tab-toc" hidden={tab !== 'toc'}
+          >
+            {/* 點目錄設定 reader 是明確的使用者意圖,和方向鍵選取候選同一類,
+                因此直接走 setReader——它會成為下一次查詢的脈絡法規(§5.5 情境一)。 */}
+            <TocPane corpus={corpus} reader={reader} onOpen={setReader} />
+          </div>
+          <DataVersion sourceUpdatedAt={corpus.sourceUpdatedAt} />
         </div>
-        <div
-          className="result-scroll" role="tabpanel" id="panel-toc"
-          aria-labelledby="tab-toc" hidden={tab !== 'toc'}
-        >
-          {/* 點目錄設定 reader 是明確的使用者意圖,和方向鍵選取候選同一類,
-              因此直接走 setReader——它會成為下一次查詢的脈絡法規(§5.5 情境一)。 */}
-          <TocPane corpus={corpus} reader={reader} onOpen={setReader} />
-        </div>
-        <DataVersion sourceUpdatedAt={corpus.sourceUpdatedAt} />
       </div>
       <div className="pane-right" ref={readerRef} tabIndex={-1}>
         <ReaderPane
