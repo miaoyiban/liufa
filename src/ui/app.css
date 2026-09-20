@@ -43,23 +43,26 @@ body {
 }
 
 .pane-toggle {
-  font: inherit;
-  font-size: 0.9rem;
-  line-height: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: none;
   color: var(--muted);
   cursor: pointer;
-  padding: 0.35rem 0.6rem;
-  text-align: right;
+  padding: 0.4rem 0.7rem;
 }
+.pane-toggle svg { display: block; }
 .pane-toggle:hover { background: #fafafa; color: var(--fg); }
-/* 收合後整條窄軌都是可按的目標,不是只有那個小箭頭 */
+/* 收合後整條窄軌都是可按的目標,不是只有那個小圖示。
+   align-items 改成 flex-start:窄軌有整個視窗那麼高,置中會讓圖示跑到
+   畫面正中間,離它展開時的位置很遠。 */
 .app-collapsed .pane-toggle {
   flex: 1;
-  text-align: center;
-  padding: 0.5rem 0;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0.55rem 0;
   border-bottom: 0;
 }
 

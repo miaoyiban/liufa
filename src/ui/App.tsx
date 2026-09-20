@@ -275,7 +275,15 @@ function Workspace({ corpus }: { corpus: import('../core/types').Corpus }) {
           title={collapsed ? '展開側欄' : '收合側欄'}
           onClick={() => setCollapsed((c) => !c)}
         >
-          <span aria-hidden="true">{collapsed ? '›' : '‹'}</span>
+          {/* 漢堡圖示畫成 inline SVG,不用 ☰(U+2630):那個字元在各平台字型裡
+              大小落差很大,有些字型根本沒有,會掉成豆腐框。
+              圖示本身 aria-hidden,按鈕的可及名稱完全來自上面的 aria-label。 */}
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M2 4h12M2 8h12M2 12h12"
+              fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+            />
+          </svg>
         </button>
         {/* 收合用 hidden 而不是不渲染:目錄展開到第幾編、搜尋結果、捲動位置
             都留在原地(理由同下方「兩個分頁都保持掛載」)。 */}
